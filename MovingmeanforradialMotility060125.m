@@ -1,5 +1,5 @@
 %%Script: Moving mean of diffusionconstants in colonies (radially resolved)
-% You can use this script to just plot data or even to get the mean of data
+% You can use this script to just plot data or average data
 % Name from developmental stage: meanoftimepointsfromshell 
 
 
