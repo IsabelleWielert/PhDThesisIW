@@ -6,9 +6,9 @@ The programs are written in MATLAB 2019 and are sorted by their functionality. I
 Here is a short overview about the branches: 
 - ColonyMotility (RawData from Fiji/ImageJ)
 - ColonyStructure (developed by Tom Cronenberg and adpated by myself)
-- DoubleTrap (Analysis of Data from double laser trap & calibration)
+- DoubleTrap (Analysis of Data from double laser trap & calibration developed by myself)
 - GrowthratesandStatisticalTest (based on data from colony formung units)
 - PiliLabelling (Semi-automated program to analyse videos of fluorescently labelled T4P - numbers and dynamics)
-- RadialMotilityAnalysis_ProjectColonyEversion (Analysis of colonies of fluorescent bacteria on the single cell level, raidally and time-resolved)
+- RadialMotilityAnalysis_ProjectColonyEversion (Analysis of colonies of fluorescent bacteria on the single cell level, radially and time-resolved)
 - StatisticalTest_SurvivalAssay (statistical tests on data from colony forming units to resolve trends over time; based on DOI:10.21105/joss.06096)
-- TwitchingMotility (developed by Lena Dewenter)
+- TwitchingMotility (developed by Lena Dewenter; Averaging samples developed by myself)
