@@ -22,7 +22,7 @@ set(0,'DefaultAxesColorOrder',summer(7));
 
 string = 'FOLDER\';
 name='NAMEofTrackFilefromTrackmate' %This is a csv file from ImageJ (Fiji) from the Trackmate Plugin, in which the image was processed (contrast) and the single cells were tracked with Trackmate (PlugIn)
-nameimage='NameofImage' %This is a .tif file format of one image of the analysed colony to dertermine the center of mass and the radii
+nameimage='NameofImage' %This is a .tif file format of one image of the analysed colony to determine the center of mass and the radii
 
 data = readtable(strcat(string,strcat(name,'.csv')));
 
