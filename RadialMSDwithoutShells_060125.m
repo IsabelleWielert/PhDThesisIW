@@ -18,11 +18,12 @@ set(0,'DefaultAxesColorOrder',summer(7));
 %%
 %for Marcs Data: change DT and maxSize
 
-%Einlesen der Daten .csv von Fiji
+%Einlesen der Daten .csv von Fiji, HERE YOU NEED TO ENTER YOUR FILE NAMES
 
 string = 'FOLDER\';
-name='NAMEofTrackFilefromTrackmate'
-nameimage='NameofImage'
+name='NAMEofTrackFilefromTrackmate' %This is a csv file from ImageJ (Fiji) from the Trackmate Plugin, in which the image was processed (contrast) and the single cells were tracked with Trackmate (PlugIn)
+nameimage='NameofImage' %This is a .tif file format of one image of the analysed colony to dertermine the center of mass and the radii
+
 data = readtable(strcat(string,strcat(name,'.csv')));
 
 input = data;
@@ -58,7 +59,7 @@ T = (0:1:num_fr-1)*DT; k=1; % bins per mum
 warning('off','all');
 input=DATA;
 
-%Masterdata erstellen (master function bring data in a form to work with)
+%Masterdata erstellen (master function bring data in a form to work with (this function was developed by Marc Hennes))
 [M,num_tr] = master(DATA);
 %% Boundary bestimmen:
 xyscale = 0.0792354;
