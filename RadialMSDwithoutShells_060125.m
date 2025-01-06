@@ -19,20 +19,24 @@ set(0,'DefaultAxesColorOrder',summer(7));
 %for Marcs Data: change DT and maxSize
 
 %Einlesen der Daten .csv von Fiji
-string = 'X:\01_Isabelle Wielert Phd\06_Colony_explosions\VonDesktop\Storm data stephan\gfpstrain_folding\241210_NG151_green\M5\';
-name='NDSequence_gfp_spots_Vid053'
-nameimage='NDSequence_gfp_053'
+
+string = 'FOLDER\';
+name='NAMEofTrackFilefromTrackmate'
+nameimage='NameofImage'
 data = readtable(strcat(string,strcat(name,'.csv')));
 
 input = data;
 
-savepath='X:\01_Isabelle Wielert Phd\06_Colony_explosions\VonDesktop\Storm data stephan\gfpstrain_folding\241210_NG151_green\M5\';
-pathi=[savepath '\final5grg3.fig']
-pathdata=[savepath '\Analysediff53testiiiidetelezte.mat']
+savepath='SaveFolder\';
+pathi=[savepath '\Nameoffinalfig.fig']
+pathdata=[savepath '\NameofAnalysis.mat']
+
+
+
 %Form of data
 
 input=table2array(input);
-input(1:3,:)=[]; % ersten drei Textzeilen der Tabelle löschen
+input(1:3,:)=[]; % ersten drei Textzeilen der Tabelle lÃ¶schen
 
 MSD_to_mean=[];
 DATA=[];
@@ -153,7 +157,7 @@ elseif dessert == 2
     % Set center of mass manually
     f1=figure('Name','Where is the center of the colony?');
     for i=1:size(M,1)
-        %benötigte Variablen aus Mastermatrix raus lesen
+        %benÃ¶tigte Variablen aus Mastermatrix raus lesen
         Rowy=M(i,:,2);
         Rowx=M(i,:,1);
         plot(Rowx,Rowy,'r') % you get a figure with all the tracks
@@ -170,7 +174,7 @@ end
 
 f1=figure('Name','Where is the center of the colony?');
 for i=1:size(M,1)
-    %benötigte Variablen aus Mastermatrix raus lesen
+    %benÃ¶tigte Variablen aus Mastermatrix raus lesen
     Rowy=M(i,:,2);
     Rowx=M(i,:,1);
     plot(Rowx,Rowy,'r')
@@ -186,7 +190,7 @@ MSD_tracks={};
 Rad_pos=[];
 Error={};
 for i=1:size(M,1)
-    %benötigte Variablen aus Mastermatrix raus lesen
+    %benÃ¶tigte Variablen aus Mastermatrix raus lesen
     Rowy=M(i,:,2);
     Rowx=M(i,:,1);
     Rowy(isnan(Rowy)) = [];
@@ -258,7 +262,7 @@ for i=1:size(M,1)
         end
     end
     
-    for j=1:N-1 %über die Zeit mitteln
+    for j=1:N-1 %Ã¼ber die Zeit mitteln
         meanmsd(j)=meanmsd(j)/(N-j+1);
         C_v(j)=C_v(j)./(N-j+1);
     end
@@ -279,7 +283,7 @@ hold off;
 
 
 %% MSD Matrizen vorbereiten
-% MSD Matrizen vorbereiten um über alle Tracks mitteln zu können:
+% MSD Matrizen vorbereiten um Ã¼ber alle Tracks mitteln zu kÃ¶nnen:
 maxSize = max(cellfun(@numel, MSD_tracks));
 fcn = @(x) [x  nan(1,maxSize-numel(x))];  %# semicolon here
 rmat = cellfun(fcn, MSD_tracks,'UniformOutput',false);  %# Pad each cell with NaNs
@@ -336,8 +340,8 @@ h=figure();
 scatter(XA(1:end),YA(1:end));
 ylim([0 0.1])
 xlim([1 44])
-xlabel('Distance to edge [µm]');
-ylabel('Diffusion constant [µm^2/s]');
+xlabel('Distance to edge [Âµm]');
+ylabel('Diffusion constant [Âµm^2/s]');
 hold off
 %%
 
@@ -349,8 +353,8 @@ h3=figure();
 plot(XA_sorted(1:end),newYA(1:end),'-r');
 ylim([0 0.1])
 xlim([0 44])
-xlabel('Distance to edge [µm]');
-ylabel('Diffusion constant [µm^2/s]');
+xlabel('Distance to edge [Âµm]');
+ylabel('Diffusion constant [Âµm^2/s]');
 hold on
 
 M=movmean(newYA,2,"omitnan")
