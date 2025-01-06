@@ -1,4 +1,5 @@
-% from input and num_fr, writes master file
+% from input and num_fr, writes master file to bring data in the right format 
+% this file was developed by Marc Hennes and adpated by myself
 % input is xls tracking file from fiji
 
 function [M,num_tr] = master(input)
