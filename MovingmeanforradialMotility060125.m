@@ -12,7 +12,7 @@ set(0,'DefaultAxesColorOrder',hsv(16));
 cmap=[[216 27 96]./255;[30 136 229]./255; [255 193 7]./255; [0 77 64]./255; [254 97 0]./255 ;[120 94 240]./255;[120 94 100]./255;[120 94 10]./255];    
 
 % open file 
-fname = {fullfile('X:\01_Isabelle Wielert Phd\06_Colony_explosions\VonDesktop\Storm data stephan\gfpstrain_folding\241204_green_ch1\M2\*.mat')};
+fname = {fullfile('FILE\*.mat')};
 arr=[7,5,3]; % if you woild like to normalize the diffusion constant, this will get you the minimum
 
 
@@ -58,8 +58,8 @@ for i=1:length(datafiles)
     plot(B(i).XA_sortedfromedge,smoothdata(B(i).newYA,'movmean',0.1*length(B(i).newYA)), 'LineWidth', 1.5); 
     hold on;
     legend('Location', 'northwest');
-    ylabel('Diffusion constant [µm^2/s]');
-    xlabel('Distance from edge of colony [µm]');
+    ylabel('Diffusion constant [Âµm^2/s]');
+    xlabel('Distance from edge of colony [Âµm]');
     title('Radial motility (X hours prior to folding)');
 
 end
@@ -80,8 +80,8 @@ figure();
 %  yline(min(smoothdata(sortedY,'movmean',0.1*length(sortedY))))
  hold on 
    legend('Location', 'northwest');
-   ylabel('Mean Diffusion constant [µm^2/s]');
-   xlabel('Distance from edge of colony [µm]');
+   ylabel('Mean Diffusion constant [Âµm^2/s]');
+   xlabel('Distance from edge of colony [Âµm]');
    title('Radial motility (1.5 h prior to folding)');
    hold off;
    
@@ -92,8 +92,8 @@ figure();
 %  hold on;
  
    legend({'Folding', 'minimum','Non-folding', 'minimum'},'Location', 'northeast');
-   ylabel('Mean Diffusion constant [µm^2/s]');
-   xlabel('Distance from edge of colony [µm]');
+   ylabel('Mean Diffusion constant [Âµm^2/s]');
+   xlabel('Distance from edge of colony [Âµm]');
 %    title('Radial motility (2 hours prior to folding)');
    hold off;
 end
