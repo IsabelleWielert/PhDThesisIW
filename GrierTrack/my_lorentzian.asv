@@ -1,0 +1,9 @@
+function y = my_lorentzian(param, x)
+
+D = param(1);
+f_c = param(2);
+f_s = 3000;
+n_max = 0;
+
+y = D./(pi^2*(f_c^2 + x.^2));  
+

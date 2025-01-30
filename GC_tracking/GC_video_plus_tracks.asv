@@ -1,0 +1,157 @@
+function GC_video_plus_tracks(data, frames, fps, win_sec, binning, camera)
+   
+  
+    %open dialog for choosing the first tif-image in the desired folder
+    [FileName,PathName] = uigetfile('*.tif; *.bmp');
+    %if cancel is pushed, then return.
+    if (isscalar(FileName) == 1) && (isscalar(PathName) == 1);
+        return;
+    end  
+    file_path = [PathName, FileName];
+    % Ending of the image file (e.g. .bmp, .tif);
+    path_end = FileName(end-3:end);
+
+    % pixel factor for absolute lengthscales
+    switch camera
+        case 1 %100x oil immersion objective (TIRF)
+            magni = binning*0.160;
+        case 2 %100x oil immersion objective (Confocal)
+            magni = binning*0.099;%0.134196;%0.2017%0.0775668; 
+    end        
+     
+   
+    if (isdir([PathName, 'results_', FileName(1:end-4)])==0)
+        mkdir([PathName, 'results_', FileName(1:end-4)]);   
+    end
+        
+    cd([PathName, 'results_', FileName(1:end-4)]);
+    
+    tr_num = data(:,4);
+    tr_fr = data(:,3);
+    tr_pos = data(:,1:2);
+    tr_max = max(tr_num);
+    
+    %fill pos data of dead frames via linear interpolation
+    data_new = zeros(1000000,5);
+    for i=1:tr_max
+        ind_tr = find(tr_num==i);
+        tr = tr_pos(ind_tr,1:2);
+        fr = tr_fr(ind_tr);
+        tr = fill_dead_frames(fr, tr);
+        dp = length(tr);
+        fr = fr(1):fr(end);
+        null_ind = find(data_new(:,1)==0,1);
+        ind = null_ind:null_ind+dp-1;
+        data_new(ind,1:2) = tr;
+        data_new(ind,3) = fr;
+        data_new(ind,4) = i;
+    end
+    data_new(find(data_new(:,1)==0,1):end,:)=[];
+    tr_num = data_new(:,4);
+    tr_fr = data_new(:,3);
+    tr_pos = data_new(:,1:2)/magni;
+    
+    multi_tif_path = [FileName(1:end-4), '_plus_tracks', path_end];
+    img = double(imread(file_path,1));   
+    
+    figure(1),
+    %set(1,'nextplot','replacechildren');
+    axis([0 size(img,2) 0 size(img,1)]),
+    set(1, 'Position', [1,100, size(img,2), size(img,1)]);
+    axes('Position', [0,0,1,1]); 
+    
+    colormap('gray'),
+    
+    h_img = imagesc(img);
+    hold on
+    h_time = text(10,30, num2str(1/fps, '%1.1fs'),'FontSize', 16); 
+    hold on
+    h_tracks = zeros(tr_max,1);
+    h_tracks_id = zeros(tr_max,1);
+    h_cells = zeros(tr_max,1);
+    for j=1:tr_max
+        h_cells(j) = plot(tr_pos(1,1),tr_pos(1,2),'o', 'MarkerEdgeColor','k', ...
+            'MarkerFaceColor', 'k',  'MarkerSize', 1);
+        h_tracks(j) = plot(tr_pos(1,1), tr_pos(1,2), '-k', 'LineWidth', 1);
+         hold on
+         h_tracks_id(j) = text(tr_pos(1,1) +10, tr_pos(1,2), int2str(j),'Color', 'k',...
+                                                               'FontSize', 12);
+    end
+    hold off
+    for i=1496:14
+        img = double(imread(file_path,i)); 
+        set(h_img, 'CData', img);
+        set(h_time, 'String', num2str(i/fps, '%1.1fs'));   
+        for j=1:tr_max
+            if strcmp(get(h_tracks(j), 'Visible'), 'off')==1
+                set(h_tracks(j), 'Visible', 'on')
+                set(h_tracks_id(j), 'Visible', 'on')
+                set(h_cells(j), 'Visible', 'on')
+            end
+            win = fps*win_sec;
+            ind_tr = find(tr_num==j);
+            if (i == frames)
+                set(h_tracks_id(j), 'Visible', 'off')
+                set(h_cells(j), 'Visible', 'off')
+                set(h_tracks(j), 'XData', tr_pos(ind_tr,1), 'YData', tr_pos(ind_tr,2));
+            else
+                if length(ind_tr)<win
+                    win = length(ind_tr);
+                end
+                ind_fr = find(tr_fr(ind_tr)==i);
+                if ~isempty(ind_fr)
+                    if (ind_fr <= win/2)
+                        set(h_tracks(j), 'XData', tr_pos(ind_tr(1:ind_fr+floor(win/2)),1),...
+                                         'YData', tr_pos(ind_tr(1:ind_fr+floor(win/2)),2));
+                    elseif (ind_fr > win/2 && ind_fr <= length(ind_tr)-win/2)
+                        set(h_tracks(j), 'XData', tr_pos(ind_tr(ind_fr-floor(win/2):ind_fr+floor(win/2)),1), ...
+                                         'YData', tr_pos(ind_tr(ind_fr-floor(win/2):ind_fr+floor(win/2)),2));
+                    elseif (ind_fr > win/2 && ind_fr > length(ind_tr)- win/2)
+                        set(h_tracks(j), 'Xdata', tr_pos(ind_tr(ind_fr-floor(win/2):end),1), ...
+                                         'Ydata', tr_pos(ind_tr(ind_fr-floor(win/2):end),2));
+                    end                   
+                    set(h_tracks_id(j), 'Position', [tr_pos(ind_tr(1) + ...
+                                 ind_fr,1) + 10, tr_pos(ind_tr(1) + ind_fr,2)]);
+                    set(h_cells(j), 'XData', tr_pos(ind_tr(ind_fr),1),...
+                        'YData', tr_pos(ind_tr(ind_fr),2));
+                else
+                    if strcmp(get(h_tracks(j), 'Visible'), 'on')==1
+                        set(h_tracks(j), 'Visible', 'off')
+                        set(h_tracks_id(j), 'Visible', 'off')
+                        set(h_cells(j), 'Visible', 'off')
+                    end
+                end
+            end
+            %set(h_tracks_id(j), 'Visible', 'off')
+        end
+        set(h_time, 'Visible', 'off')
+        frame = getframe(gcf);
+        [img,tmp] = frame2im(frame);
+        img = rgb2gray(img);
+        %generation of a 8-bit multi-image tiff-file with tracks
+        imwrite(img, multi_tif_path, 'tif', ...
+                'WriteMode', 'append', 'Compression', 'none')
+    end
+end
+
+function pos = fill_dead_frames(fr_id, pos)
+
+    dp = length(fr_id);
+    pos_old = pos;
+    num_filled = 0;
+    for i=2:dp
+        fr_diff = fr_id(i)-fr_id(i-1);
+        if fr_diff>1
+            pos_diff = pos_old(i,:) - pos_old(i-1,:);
+            pos_filled = zeros(fr_diff-1,2);
+            for j=1:fr_diff-1
+                pos_filled(j,:) = pos_old(i-1,:)+j/fr_diff.*pos_diff;         
+            end
+            ind_fill = num_filled+i-1;
+            pos_tmp1 = pos(1:ind_fill,:);
+            pos_tmp2 = pos(ind_fill+1:end,:);
+            pos = vertcat(pos_tmp1, pos_filled, pos_tmp2);
+            num_filled = num_filled + fr_diff-1;
+        end
+    end
+end

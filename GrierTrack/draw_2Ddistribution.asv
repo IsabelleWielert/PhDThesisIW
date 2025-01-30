@@ -1,0 +1,125 @@
+function [results,error] = draw_2Ddistribution(PathName, FileName, distr, distr_xy, frames, bin, mean_xy, magni, diam_px, i)
+
+h = figure('Visible', 'off');
+
+k_b = 1.3806505E-23; %Boltzmann constant
+T = 298.15; %temperature in the lab in units of Kelvin
+
+path_distr = [PathName, '\results\distribution_bead', int2str(i), '_L', FileName, '.tif'];  
+path_distr_x = [PathName, '\results\distribution_x_bead', int2str(i), '_L', FileName, '.tif']; 
+path_distr_y = [PathName, '\results\distribution_y_bead', int2str(i), '_L', FileName, '.tif']; 
+
+
+%Folgende vier Zeilen sind zur Bestimmung der Ausgabebereiche wichtig. Es wird für jeden Bead vom Mittelwert mean_corr_xy
+%ausgegangen und der Bereich um den Mittelwert mit 3fachen Beaddurchmesser berechnet    
+sz_min_m = round(bin*mean_xy(i,2)/magni - 1.2*diam_px);
+sz_max_m = round(bin*mean_xy(i,2)/magni + 1.2*diam_px);
+sz_min_n = round(bin*mean_xy(i,1)/magni - 1.2*diam_px);
+sz_max_n = round(bin*mean_xy(i,1)/magni + 1.2*diam_px);
+   
+colormap(jet), imagesc(distr(sz_min_m:sz_max_m, sz_min_n:sz_max_n)), colorbar;
+saveas(h, path_distr, 'tif');
+close(h);
+
+
+%path_data1 = [PathName, '\results\distribution_xy_bead', int2str(3), '_L', FileName, '.mat'];
+ 
+%load(path_data1, 'distr_xy', '-mat');
+
+N_0 = 0.025; 
+kappa_0 = 0.015;
+mu_0 = 0;
+bin = 0.001;
+n_bin = -0.1:bin:0.1;
+
+my_gaussian = fittype('N*exp(-1/2*(1E-15)/(k_b*T)*kappa*(x-mu).^2)',...
+   'coeff',{'N','kappa', 'mu'} ,'problem', {'k_b', 'T'});
+
+opts = fitoptions(my_gaussian);
+set(opts,'TolFun',1E-18, 'TolX', 1E-18, 'StartPoint', ...
+    [N_0, kappa_0, mu_0], 'Lower', [0.001, 0.0001, -0.02], ...
+    'Upper', [0.2, 0.300, 0.02]);
+
+[fit_x, gof_x, out_x] = fit(n_bin', distr_xy(:,1,i)/frames, my_gaussian,opts,'problem',{k_b,T});
+[fit_y, gof_y, out_y] = fit(n_bin', distr_xy(:,2,i)/frames, my_gaussian,opts,'problem',{k_b,T});
+
+kappa_gauss = [fit_x.kappa, fit_y.kappa];
+
+confi_x = confint(fit_x);
+confi_y = confint(fit_y);
+error_x = confi_x(2) - confi_x(1);
+error_y = confi_y(2) - confi_y(1);
+error = [error_x, error_y];
+
+results = kappa_gauss;
+results(2,1:2) = [
+    
+c_x = predint(fit_x, n_bin', 0.95);
+c_y = predint(fit_y, n_bin', 0.95);
+
+max_x = max(distr_xy(:,1,i)'/frames);
+max_y = max(distr_xy(:,2,i)'/frames);
+
+max_x_res = max(out_x.residuals);
+max_y_res = max(out_y.residuals);
+
+h = figure('Visible', 'off');
+subplot(2,1,1), stairs(n_bin, distr_xy(:,1,i)'/frames, 'k');
+hold on
+plot(fit_x, '-r');
+hold on
+plot(n_bin, c_x, '--r'), ylabel('probability','FontSize',10), ...
+         xlabel('distance [µm]','FontSize',10), title(['Bead ',int2str(i),...
+         ': Probability distribution for x-values'],'FontSize',10), ...
+         axis([min(n_bin) max(n_bin) 0 max_x]),...
+         text(min(n_bin)+0.01,max_x-2*max_x/10,['\kappa = ', ...
+         num2str(fit_x.kappa, '%1.4fpN/nm'), '\newline Confidence interval:\newline',...
+         num2str(confi_x(1,2), '(%1.4f'), '-', num2str(confi_x(2,2), ...
+         '%1.4f)pN/nm')], 'FontSize',10), ...
+         legend(['exp. data (bin = ', int2str(1000*bin),...
+         'nm)'], 'fit', 'prediction bounds (95%)', 'Location', 'NE');
+hold off
+
+subplot(2,1,2), bar(n_bin, out_x.residuals, 'r'), ylabel('Residuals','FontSize',10), ...
+         xlabel('distance [µm]','FontSize',10), title(['Bead ',int2str(i),...
+         ': Distribution of residuals for x-values'],'FontSize',10), ...
+         axis([min(n_bin) max(n_bin) -max_x_res max_x_res]),...
+         legend('residuals', 'Location', 'NE'),...
+         text(min(n_bin)+0.01,max_x_res - 2*max_x_res/10,['adjusted R^2 =', ...
+         num2str(gof_x.adjrsquare, '%1.5f')],'FontSize',10);%
+
+saveas(h, path_distr_x, 'tif');
+close(h);
+
+h = figure('Visible', 'off');
+
+subplot(2,1,1), stairs(n_bin, distr_xy(:,2,i)'/frames, 'k');
+hold on
+plot(fit_y, '-r');
+hold on
+plot(n_bin, c_y, '--r'),  ylabel('probability','FontSize',10), ...
+         xlabel('distance [µm]','FontSize',10), title(['Bead ',int2str(i),...
+         ': Probability distribution for y-values'],'FontSize',10), ...
+         axis([min(n_bin) max(n_bin) 0 max_y]),...
+         text(min(n_bin)+0.01,max_y-2*max_y/10,['\kappa = ', ...
+         num2str(fit_y.kappa, '%1.4fpN/nm'), '\newline Confidence interval:\newline',...
+         num2str(confi_y(1,2), '(%1.4f'), '-', num2str(confi_y(2,2), ...
+         '%1.4f)pN/nm')], 'FontSize',10), ...
+         legend(['exp. data (bin = ', int2str(1000*bin),...
+         'nm)'],'fit', 'prediction bounds (95%)', 'Location', 'NE');
+hold off
+
+subplot(2,1,2), bar(n_bin, out_y.residuals, 'r'), ylabel('Residuals','FontSize',10), ...
+         xlabel('distance [µm]','FontSize',10), title(['Bead ',int2str(i),...
+         ': Distribution of residuals for y-values'],'FontSize',10), ...
+         axis([min(n_bin) max(n_bin) -max_y_res max_y_res]),...
+         legend('residuals', 'Location', 'NE');%
+         text(min(n_bin)+0.01,max_y_res - 2*max_y_res/10,['adjusted R^2 = ', ...
+         num2str(gof_y.adjrsquare, '%1.5f')],'FontSize',10);%
+saveas(h, path_distr_y, 'tif');
+close(h);
+
+end
+
+
+

@@ -1,0 +1,22 @@
+function [sig_fit, sig_gof] = do_two_state_model(time, speed)
+
+%this function calculates a sigmoidal fit to twitching motility data
+k_b = 1.3806504E-23; %Boltzmann constant
+T = 273.15+37; %temperature at 37°C in Kelvin
+
+v_h = 1.5; %start point for high velocity mode
+v_l = 0.5; %start point for loe velocity mode
+d_eps = -20; %Difference of free energy between two states
+r = -20; %rate
+t0 = 15; %Global Switching time window in [min]
+
+
+my_sigmoid = fittype('(1./(exp(-(d_eps-r.*(x-t0)))+1)).*(exp(-(d_eps-r.*(x-t0))).*v_h + v_l)',...
+   'coeff',{'v_h','v_l', 'd_eps', 'r'}, 'problem', 't0');
+
+opts = fitoptions(my_sigmoid);
+set(opts,'TolFun',1E-6, 'TolX', 1E-6, ...
+    'StartPoint', [v_h, v_l, d_eps, r, t0], 'Lower', [1, 0, -100, -100, -1E6],...
+    'Upper', [3, 2, 0, 0, 1E6]);
+
+[sig_fit, sig_gof] = fit(time, speed, my_sigmoid,opts, 'problem', t);

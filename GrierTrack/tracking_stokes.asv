@@ -1,0 +1,253 @@
+%*****************************************************************************************
+%Dieses Programm trackt Beads (gefangen in HOT) beliebiger Zahl aber definierten Größe
+%in einem multipage_tif-file beliebiger frame-Zahl.
+%
+%input:
+%      frames_input - Anzahl der Bilder der multipage_tif-Datei
+%      num_input - Anzahl der Beads, die getrackt werden sollen
+%optional input:
+%      cutting_range - Anzahl der herausgeschnittenen frames, wenn ein fehlerhafter frame
+%                      auftaucht. Wenn also die durch num_input vorgegebenen
+%                      Beads nicht gefunden werden, so gehen im Bereich von
+%                      [frame - floor(cutting_range/2), frame + floor(cutting_range/2)]
+%                      nicht ins tracking ein; preset: cutting_range = 7 
+%      pass_limit    - Band_pass Limit (0 - 30); preset: band_pass = 11
+%      magni         - magnification of the objective (50, 60, 100); preset magni = 60
+%      diameter      - Diameter of the Beads in Pixel, preset: diameter = 33
+%      binning       - Binning of the frames (1 - 4)
+%
+% Zum Tracken werden Routinen der Griergroup verwendet (bpass, pkfind, cntrd, track).
+% bpass filtert das einzelne Bild; pkfind gibt die vorläufigen Koordinaten der
+% gefundenen Beads zurück; cntrd berechnet Zentrum der Beads mit subpixel
+% Genauigkeit. Daraufhin wird mit track ein Datenfeld tr erzeugt, dessen 
+% Inhalt folgende Bedeutung hat:
+% Spalte   Bedeutung
+%   1      x-Koordinate des jeweiligen Beads
+%   2      y-Koordinate des jeweiligen Beads
+%   3      frame des jeweiligen Beads
+%   4      Numer des Beads
+%
+%output:
+%       n tif-files: Für n getrackte Beads werden n Graphen gespeichert, die jeweils
+%                      frame gegen x- bzw. y-Werte darstellen ohne und mit
+%                      Driftkorrektur.
+%       txt-file: Enthält Koordinaten der Beads, Steigung des Drifts bzw. nach Drift- 
+%                 korrektur, Standardabweichung und Federkonstante für jeden 
+%                 Bead und für x-Koordinaten und y-Koordinaten
+%
+%       Ausgegebene Dateien werden in Ordner der multipage_tif-Datei
+%       gespeichert!!
+%******************************************************************************************
+function tracking_stokes(frames_input, num_input, cutting_range, diameter, binning, pass_limit, magni_input)
+
+%'nargin' steht für 'number of arguments'. Im Folgenden werden bei
+%verschiedenener Wahl der Zahl Eingangsparameter die optionalen Argumente, falls
+%sie durch Aufrufen der Routine nicht bestimmt werden, vom Programm
+%festgelegt.
+switch nargin
+    case 2
+       cutting_range = 7; %muss ungerade sein
+       diameter = 9;
+       binning = 4;
+       pass_limit = 11; 
+       magni_input = 60;
+    case 3 
+       diameter = 9;
+       binning = 4;
+       pass_limit = 11; 
+       magni_input = 60;
+    case 4
+       binning = 4;
+       pass_limit = 11; 
+       magni_input = 60;
+    case 5
+       pass_limit = 11; 
+       magni_input = 60;
+    case 6    
+       magni_input = 60;
+    otherwise
+    fprintf(1, 'Wrong number of arguments!\n 1. Arg.: Number of Frames\n 2. Arg.: Number of Beads\n Optional arguments:\n 3. Arg.: ');
+    fprintf(1, 'Range of the cutting, if a frame does not give the right result\n          (must be a odd number)');
+    fprintf(1, '; preset: cutting_range = 7\n 4. Arg.: Diameter of the Beads in Pixel (5 - 35); preset: diameter = 9\n');
+    fprintf(1, ' 5. Arg.: Binning of the frames (1 -4) ; preset: binning = 4\n'); 
+    fprintf(1, ' 6. Arg.: Bandpass Limit (1 - 50); preset: band_pass = 11\n'); 
+    fprintf(1, ' 7. Arg.: magnification of the objective (50, 60, 100); preset: magni = 60\n');
+    return; 
+end    
+%'pass_limit', 'binning' und 'diameter' sind auf bestimmte Bereiche limitiert:
+if (pass_limit <= 0) | (pass_limit > 50)
+    fprintf(1, 'Bandpass is out of range (0 - 50)!!\n');
+    return;
+end    
+if (binning <= 0) | (binning > 4)
+    fprintf(1, 'Binning is out of range (1 - 4)!!\n');
+    return;
+end 
+if (diameter < 5) | (diameter > 35)
+    fprintf(1, 'Diameter of the Beads is out of range (5 - 35)!!\n');
+    return;
+end
+%Öffnet Dialogfenster zur Eingabe der gewünschten multipage_tif-Datei
+[FileName,PathName] = uigetfile('*.tif');
+%Falls auf Abbrechen gedrückt wird, soll Funktion tracking verlassen werden
+if (FileName == 0) & (PathName == 0);
+    return;
+end    
+%Strings für Tif- und txt-Datei:
+file_path = [PathName, FileName];
+txt_file = [PathName, 'Kalibrierung', '_L',FileName, '.txt'];
+
+%Festlegung wichtiger Konstanten zur Berechnung der Federkonstanten
+switch magni_input
+    case 60
+        magni = binning*0.03894775777;
+    case 100
+        magni = binning*0.07756686399;
+    case 50
+        magni = binning*0.03894; %noch nicht kalibriert!!
+    otherwise
+        fprintf(1, 'Wrong objective magnification! Please choose 50, 60 or 100.\n');
+        return;
+end        
+k_boltzmann = 1.3806505E-23; %Boltzmannkonstante
+temp = 293.15; %Temperatur im Labor
+
+frames = frames_input;
+num_beads = num_input;
+count = 0;
+i = 1;
+noise = 1;
+%Folgende while-Schleife liest Bilder aus, findet Beads und speichert Daten
+%(x-Wert, y-Wert, frame) am Ende aus jedem Bild in ein einziges Array 'pos_1ist'.
+%Zusätzlich soll, falls die gefundene Anzahl an Beads "num_beads" größer 
+%(bzw. kleiner) als "num_input" ist, der Bandpass sukzessiv erhöht
+%(bzw. erniedrigt) werden. Jedesmal wird die Routine pkfnd Anzahl der Beads
+%bestimmen. Dadurch wird pass_limit so eingestellt, dass
+%num_beads=num_input ist. Bewegt sich pass_limit aus den zugelassen Bereich (1-50), 
+%da z.B. der frame fehlerhaft ist (keine Beads) so wird innerhalb dieser while-Schleife 
+%dieser frame und die frames in der Umgebung (insgesamt cutting_range
+%frames) aus der pos_list herausgenommen. Zur Kontrolle von pkfnd und cnt
+%wird in fig(1) der erste frame mit getrackten Koordinaten ausgegeben. Hier
+%kann überprüft werden, ob das Zentrum der Beads gefunden wird. Falls ein
+%fehlerhafter frame auftritt, wird dieser auch jedesmal ausgegeben, damit
+%sich leichter ein Grund angeben läßt
+while(i <= frames_input)  
+  %in 'img' wird das erste Bild geladen (8-bit)  
+  img = double(imread(file_path,i));
+  img_filter = bpass(img, noise, pass_limit);
+  %jetzt wird in max_bright höchste Intensität (zw. 0-255) des Bildes
+  %img_filter übergeben
+  max_bright = max(max(img_filter)); 
+  %daraus berechnet sich der Schwellenwert 'thrh' für die Routine pkfnd
+  thrh =  max_bright - max_bright/3;
+  pk = pkfnd(img_filter, thrh, diameter);
+  %Die Routine cnt berechnet das genaue Zentrum eines jeden gefundenen
+  %Beads der Routine pkfnd und 
+  cnt = cntrd(img_filter, pk, diameter);
+  num_beads = size(cnt,1); %Anzahl der getrackten Beads    
+  while (num_beads > num_input)
+      pass_limit = pass_limit + 1;
+      if (pass_limit >= 50)
+          fprintf(1, 'bandpass limit is too big (>=50)\n');
+          break;
+      end    
+      img_filter = bpass(img, noise, pass_limit);
+      max_bright = max(max(img_filter)); 
+      thrh =  max_bright - max_bright/3;
+      pk = pkfnd(img_filter,thrh, diameter);
+      cnt = cntrd(img_filter,pk, diameter);
+      num_beads = size(cnt,1);
+  end
+  while (num_beads < num_input)
+      pass_limit = pass_limit - 1;
+      if (pass_limit <= 0)
+          fprintf(1, 'bandpass limit is too small (<=0)\n');
+          break;
+      end    
+      img_filter = bpass(img, noise, pass_limit);
+      max_bright = max(max(img_filter)); 
+      thrh =  max_bright - max_bright/3;
+      pk = pkfnd(img_filter, thrh, diameter);
+      cnt = cntrd(img_filter, pk, diameter);
+      num_beads = size(cnt,1);
+  end
+  fprintf(1, 'frame: %1.0f; threshold: %4.2f; bandpass limit: %4.0f\n', i, thrh, pass_limit);
+  fprintf(1, '%4.0f features were found\n', num_beads);
+  if (i == 1);
+      figure(1),
+      colormap('gray'),
+      imagesc(img_filter);
+      hold on
+      plot (cnt(:,1), cnt(:,2), '+r');
+      hold off
+  end
+  if (num_beads ~= num_input)
+      figure(i),
+      colormap('gray'),
+      imagesc(img_filter);
+      hold on
+      if (i >= cutting_range)
+          find_frame(count + 1:count + cutting_range) = (i-floor(cutting_range/2)):(i+floor(cutting_range/2));
+          i = i + cutting_range;
+      else
+          find_frame(1:cutting_range) = 1:cutting_range;
+          i = cutting_range + 1;
+      end
+      frames = frames - cutting_range;
+      count = count + cutting_range;    
+      pass_limit = 11; 
+      continue;
+  end
+  for j=1:num_input
+     pos = num_input*(i - count - 1) + j;
+     pos_list(pos,1:3) = [cnt(j,1:2), i - count];
+  end
+  i = i + 1;
+end  
+%frame ist 1dim Feld und dient später beim plotting zur Zuordnung
+frame = 0 : (frames - 1);
+%Routine track erhält als input:
+%    pt         - enthält die Daten des generierten gdf-files
+%    2. Arg.    - Abschätzung der maximalen Weglänge in Pixel, die ein Bead
+%                 innerhalb eines Zeitintervalls zurücklegt
+tr = track(pos_list, 100);
+
+if (frames < frames_input)
+   fprintf(1, 'Only %4.0f frames were used\n', frames);
+   fprintf(1, 'The following frames had to be deleted:\n');
+   disp(find_frame);
+else
+   fprintf(1, 'Congratulation, all frames were used!\n');
+end
+
+%Folgende verschachtelte for-Schleifen berechnen für jeden Bead (jeweils für x- und y- Koor-
+%dinaten) über routine linfit die Driftkorrektur. 
+%Erste for-Schleife geht von 1 bis Anzahl der Beads; In zweiter Schleife steht j=0 für Kalibrierung
+%für x-Werte und j=2 für Kalibrierung der y-Werte
+
+
+for i=1:num_beads;
+   for j=1:2;
+      data =  magni*tr(frames*(i-1)+1:frames*i,j)';
+      [lin_fit,errors1] = polyfit(frame, data, 1);
+      slope(j) = lin_fit(1);
+
+      %Berechung der Driftkorrektur mithilfe der Steigung aus linfit
+      corr = data - lin_fit(1)*frame;
+
+      [lin_fit_corr, errors2] = polyfit(frame, corr, 1);
+      slope_corr(j) = lin_fit_corr(1);
+      
+      num = frames + i;
+      if (j == 1)
+         figure(num), plot(frame, corr, '*r'), xlabel('frame'), ylabel('x-Werte [Mikrometer]'), ...
+         title(['Bead ',int2str(i),': x-Werte mit Driftkorrektur']), grid on, grid minor;
+         hold on
+         plot(frame, lin_fit_corr(2) + lin_fit_corr(1)*frame, '-k')
+         hold off
+         saveas(num, [PathName, 'calib_Bead', int2str(i), '_', FileName], 'tif');
+      end
+      
+   end 
+end 
+end

@@ -1,0 +1,19 @@
+function draw_3Dboltzmann(path, potential, bin, mean_xy, magni, diam_px, i);
+
+h = figure('Visible', 'off');
+  
+  %Folgende vier Zeilen sind zur Bestimmung der Ausgabebereiche wichtig. Es wird für jeden Bead vom Mittelwert mean_corr_xy
+  %ausgegangen und der Bereich um den Mittelwert mit 3fachen Beaddurchmesser berechnet    
+  sz_min_m = round(bin*mean_xy(i,2)/magni - 1.5*diam_px);
+  sz_max_m = round(bin*mean_xy(i,2)/magni + 1.5*diam_px);
+  sz_min_n = round(bin*mean_xy(i,1)/magni - 1.5*diam_px);
+  sz_max_n = round(bin*mean_xy(i,1)/magni + 1.5*diam_px);
+  x_i = magni/bin*(1:(sz_max_m - sz_min_m + 1));
+  y_i = magni/bin*(1:(sz_max_n - sz_min_n + 1));
+
+  %Ausgabe des 3-dim. Fallenpotentials 
+  meshc(x_i, y_i, potential(sz_min_m:sz_max_m, sz_min_n:sz_max_n)), zlabel('Potential Energy [pN*µm]') %
+  shading interp
+  colormap(jet), colorbar, axis on;
+  
+end

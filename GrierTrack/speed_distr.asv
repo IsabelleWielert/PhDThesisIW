@@ -1,0 +1,273 @@
+ function [speed_all, num_tracks, num_dead, datapoints] = speed_distr(im_path, tr, frames, freq, gaussian, magni)
+
+    
+    path = cd;
+    if (im_path == 0)
+        %open dialog for choosing the first tif-image in the desired folder
+        [FileName,PathName] = uigetfile('*.tif; *.bmp');
+        %if cancel is pushed, then return.
+        if (isscalar(FileName) == 1) && (isscalar(PathName) == 1);
+            return;
+        end 
+        im_path = [PathName, FileName];
+    end
+
+    
+    data_all = [];
+    datapoints = [];
+    num_dead = 0;
+    lost_tr = 0;
+    tr_max = max(tr(:,4));
+    
+    %for msd calculations    
+    sd = [];
+    my_msd = fittype('y_0 + A*x^alpha', 'coeff',{'y_0', 'A', 'alpha'});
+    y_0_start = 1;
+    A_start = 4;
+    alpha_start = 1.4;
+    opts = fitoptions(my_msd);
+    set(opts,'TolFun',1E-6, 'TolX', 1E-6, 'StartPoint', [y_0_start, A_start, alpha_start]); 
+    num_alpha = 1;
+     
+    for i=1:tr_max
+        speed = [];
+        ind_tr = [];
+        ind_tr = find(tr(:,4)==i);
+        ind_fr = tr(ind_tr,3);
+        rows = length(ind_tr);
+        pos = [];
+        pos = tr(ind_tr,1:2); %pos contains only 
+        %coordinates of tracked gc in units of micron
+        
+        %msd calculations
+        
+        if (rows >= 60)
+            max_tau = 60;
+        else
+            max_tau = rows
+        end
+        
+        max_tau = 500;
+        msd = [];
+        
+        for j=1:max_tau-1;
+            sd = [];
+            for l=1:len_tr-j
+                ind1 = l+j;
+                ind2 = l;
+                s_vec = [pos(ind1,1)-pos(ind2,1);pos(ind1,2)-...
+                    pos(ind2,2)]; 
+                sd(l) = norm(s_vec)^2;                                    
+            end
+            msd(j) = mean(sd);
+        end 
+        [param, gof, out] = fit(1/10*(3:60)', msd(3:60)', my_msd, opts);
+        
+        
+        % speed calculations
+        time = [];
+        time = 1/freq*tr(ind_tr,3); %array containing time stamps in 
+        %units of seconds
+        dist = 10 ; %distances in frames between frames (value equates to 1 second)
+        for j=1:rows-dist;
+            ind = j + dist;
+            if (ind <= rows)
+                s_vec = [pos(ind,1)-pos(j,1);pos(ind,2)-pos(j,2)];
+                delta_t = time(ind)-time(j);   
+                speed(j) = norm(s_vec)/delta_t;
+            end
+        end
+       
+        if (isempty(speed)==1)
+            lost_tr = lost_tr + 1;
+            continue;
+        end
+        
+        % moving average of speed vector to determine motility pauses or
+        % too high velocities
+        window = 30; %width of moving window in frames (corresponds to 3 seconds)
+        speed_av = [];
+        
+        len_tr = length(speed);
+        dead = 0;
+        if len_tr >= window
+              for k=1:len_tr-window
+                 speed_av = mean(speed(k:k+window));
+                 if (speed_av < 0.1 | speed_av > 5) 
+                     dead = 1;
+                     break;
+                 end
+              end
+        end
+        
+        
+        
+       
+        
+        if (dead==0)
+                datapoints = horzcat(datapoints,len_tr);                
+        
+                time_start = round(dist/2);
+                time_new = time(time_start:time_start+len_tr-1);
+                pos_new = pos(time_start:time_start+len_tr-1,:)/magni;
+                ind_fr_new = ind_fr(time_start:time_start+len_tr-1);
+                path_data_hist = [path, '\Track_No_', int2str(i) ,'_',...
+                    int2str(len_tr),'dp_Speed_hist.tif'];
+                path_track = [path, '\Track_No_', int2str(i) ,'_',...
+                    int2str(len_tr),'dp_track.tif'];
+                
+                figure(i),
+                set(i, 'Position', [1,100, 600, 450]);
+                subplot(2,1,1),
+                [n,xout] = hist(speed, 0:1/20:5);
+                bar(xout,n, .8, 'r');
+                title(['Speed: Histogram of Track No. ', int2str(i),...
+                    ' (Frames: ', int2str(tr(ind_tr(1),3)),'-', int2str(tr(ind_tr(end),3)),')'],...
+                    'FontSize', 14),
+                xlabel('Speed [µm/s]', 'FontSize', 12), ...
+                ylabel('Frequency', 'FontSize', 12),
+                xlim([0 3]);
+                subplot(2,1,2),
+                plot(time_new, speed(1:len_tr), '-r');
+                hold on
+                h_time = plot([time_new(1), time_new(1)], [0,3], '-k');
+                title('Speed versus Time', 'FontSize', 14),
+                xlabel('Time [s]', 'FontSize', 12), ...
+                ylabel('Speed [µm/s]', 'FontSize', 12),
+                xlim([0 frames/freq]);
+                ylim([0 3]);
+                grid on;
+               
+                figure(i+1),
+                
+                x_min = floor(min(pos_new(:,1)))-10;
+                y_min = floor(min(pos_new(:,2)))-10;
+                x_max = ceil(max(pos_new(:,1)))+10;
+                y_max = ceil(max(pos_new(:,2)))+10;
+               
+                axis([x_min x_max y_min y_max]),
+                
+                set(i+1, 'Position', [600,100, 600, 450]);
+                axes('Position', [0,0,1,1]);
+                colormap('gray');
+                
+                img =  double(imread(im_path,ind_fr_new(1)));
+                h_im = imagesc(img(y_min:y_max, x_min:x_max));
+                hold on
+                h_GC = plot(pos_new(1,1) - x_min + 1, pos_new(1,2)- y_min + 1, 'o', 'MarkerEdgeColor','k',...
+                      'MarkerFaceColor','r',  'MarkerSize', 3);
+                hold on
+                plot(pos_new(:,1)- x_min + 1, pos_new(:,2)- y_min + 1, '-k'),
+                hold off   
+                axis equal
+                button = questdlg('Track OK?','Check the tracks','OK', ...
+                    'Play track', 'Delete track','OK');
+                while(strcmp(button, 'Play track')==1)     
+                    for j = 1:size(time_new,1) 
+                        img =  double(imread(im_path,ind_fr_new(j)));
+                        set(h_im, 'CData', img(y_min:y_max, x_min:x_max)),
+                        set(h_time, 'XData', [time_new(j,1),time_new(j,1)]),
+                        set(h_GC, 'XData', pos_new(j,1)-x_min+1, 'YData', pos_new(j,2)-y_min+1),
+                        pause(0.02);
+                    end
+                    button = questdlg('Track OK?','Check the tracks','OK', ...
+                        'Play track', 'Delete track','OK');
+                end
+                if strcmp(button, 'OK')==1
+                    data = zeros(len_tr,3);
+                    data(:,1) = time(time_start:time_start+len_tr-1);  
+                    data(:,2) = speed(1:len_tr);
+                    data(:,3) = i;
+                    data_all = vertcat(data_all, data);
+                    saveas(i, path_data_hist, 'tif');
+                    saveas(i+1, path_track, 'tif');
+                else
+                    num_dead = num_dead + 1;
+                end
+                close(i);
+                close(i+1);
+        else
+            num_dead = num_dead + 1;
+        end
+      
+    end
+    
+    if (isempty(data_all)==1)
+        num_tracks = 0;
+        num_dead = 0;
+        return;
+    end
+    num_tracks = tr_max - lost_tr;
+    
+    figure(1000),
+    
+    [n,xout] = hist(data_all(:,2)', 0:1/20:5);
+    subplot(2,1,1),
+    bar(xout,n, .8, 'r'), 
+    %fitting a gaussian to speed histogram
+    if (gaussian == 1)
+        f = fittype('gauss1');
+    elseif (gaussian == 2)
+        f = fittype('gauss2');
+    end
+    res_fit  = fit(xout(2:end)',n(2:end)',f);
+    confi_speed = confint(res_fit);
+    if (gaussian == 1)
+         err_speed = confi_speed(2,2) - confi_speed(1,2);
+    elseif (gaussian == 2)
+         err_speed_1 = confi_speed(2,2) - confi_speed(1,2);
+         err_speed_2 = confi_speed(2,5) - confi_speed(1,5);
+    end
+    title(['Speed: Histogram (\Delta t = ',...
+        num2str(1/freq*dist, '%2.1fs)')] , 'FontSize', 14),
+    hold on
+    plot(res_fit, '-k'),
+    hold off
+    xlabel('Speed [µm/s]', 'FontSize', 12), ...
+    ylabel('Frequency', 'FontSize', 12),
+    xlim([0 3]);
+    grid on;
+    if (gaussian == 1)
+        text(1.8,max(n)-150,...
+        ['Single Gaussian Fit: \newline\Rightarrow v =(',...
+            num2str(res_fit.b1,'%1.3f'),'\pm', num2str(err_speed, ...
+            '%1.3f)µm/s'),'\newline# of tracks: ', num2str(num_tracks-num_dead, '%2.0f'), ...
+            '\newline Mean velocity =', num2str(mean(data_all(:,2)), '%1.3f'), ... 
+            '\newline# of datapoints: ', ...
+            num2str(sum(datapoints),'%3.0f')], 'FontSize',12),
+    elseif (gaussian == 2)
+    text(2.5,max(n)-50,...
+    ['Double Gaussian Fit\newline\Rightarrow v_1=(',...
+        num2str(res_fit.b1,'%1.3f'),'\pm', num2str(err_speed_1, ...
+        '%1.3f)µm/s'),'\newline\Rightarrow v_2=(',...
+        num2str(res_fit.b2,'%1.3f'),'\pm', num2str(err_speed_2, ...
+        '%1.3f)µm/s'),'\newline# of tracks: ',num2str(num_tracks - num_dead, '%2.0f'), ...
+        '\newline# of datapoints: ', ...
+        num2str(sum(datapoints),'%3.0f')], 'FontSize',12),
+    end
+%     subplot(2,1,2),
+%     [n2,xout2] = hist(datapoints, 1:60:3000);
+%     bar(xout2,n2, .8, 'r'),
+%     title('Datapoints per track: Histogram' , 'FontSize', 14),
+%     xlabel('# of datapoints per track', 'FontSize', 12), ...
+%     ylabel('Frequency', 'FontSize', 12),
+%     grid on;
+    subplot(2,1,2),
+    plot(data_all(:,1), data_all(:,2), '+r');
+    title('Speed versus Time', 'FontSize', 14),
+    xlabel('Time [s]', 'FontSize', 12), ...
+    ylabel('Speed [µm/s]', 'FontSize', 12),
+    xlim([0 frames/freq]);
+    ylim([0 3]);
+    grid on;
+    
+    path_plot_f = [path, '\Speed_all_versus_time.fig'];
+    path_plot_t = [path, '\Speed_all_versus_time.tif'];
+    saveas(1000, path_plot_f, 'fig'); 
+    saveas(1000, path_plot_t, 'tif');
+    path_speed = [path, '\Data_Speed_all_versus_time.mat'];
+    save(path_speed, 'data_all', '-mat');   
+
+
+end
+    

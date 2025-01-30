@@ -1,0 +1,205 @@
+function [results, errors] = psd_welch(PathName, FileName, z, data, temp, handles)
+   
+%global data_psd
+   k_B = 1.38065E-23;
+   path = [PathName, '\results\power_spectrum_Bead', int2str(z), '_L', FileName, '.tif'];
+  
+   
+   %window = 'bartlett';
+   nfft = size(data,1);
+   n_psd = nfft/2 + 1;
+   
+   %psd_values defines the number of values of the periodogram estimate in
+   %the range of 0 to f_nyq.
+   
+   f_s = str2double(get(handles.sampl_frequ,'String'));
+   f_min = str2double(get(handles.f_min,'String'));
+   f_max = str2double(get(handles.f_max,'String'));
+   n_b = str2double(get(handles.n_b,'String'));
+   f_nyq = f_s/2;
+   T_msr = (1/f_s)*size(data,1);
+   
+   % Hs is a sectrum-object for estimating a periodogram with a
+   % 'bartlett'-window
+   Hs = spectrum.periodogram;%spectrum.welch(window, seg_length, overlap, 'UserDefined');
+   
+   %the function psd() below calculate the psd defined from 0 to f_nyq and
+   %its integral is the mean squared amplitude of the dataseries 
+   Hpsd_x = psd(Hs, data(:,1), 'Fs', f_s, 'NFFT', nfft, 'SpectrumType', 'onesided');
+   Hpsd_y = psd(Hs, data(:,2), 'Fs', f_s, 'NFFT', nfft, 'SpectrumType', 'onesided');
+   
+  % path_noise = ['C:\Documents and Settings\Rainer\My Documents\Experiment\Calib\STD_LASER_Phantom\noi_triangle\results\power_spectrum_Bead', int2str(i),'_Lnoi_triangle.mat'];
+  % load(path_noise, 'data_noise', '-mat');
+   
+   psd_xy(:,1) = Hpsd_x.Data;% - data_noise(:,1);
+   psd_xy(:,2) = Hpsd_y.Data;% - data_noise(:,1);
+   f = Hpsd_x.Frequencies';
+   
+   % only for power spectra of noise
+   %     data_noise = psd_xy;
+   %      data_noise(:,3) = f;
+   %      path_noise = strrep(path, '.tif', '.mat');
+   %     save(path_noise, 'data_noise', '-mat');
+
+   %Buildung up of psd-frequency-blocks with n_b in length in order to reduce noise
+   
+   b_max = ceil(n_psd/n_b);
+   if (n_b~=1)
+      set(handles.data_output, 'String', ['Number of blocks: ', int2str(b_max)]);
+      drawnow
+     n_b_last = n_psd - (b_max-1)*n_b;    
+     f_bar(1:b_max) = 0;
+     psd_xy_bar(1:b_max,1:2) = 0;
+     if (n_b_last~=0)
+         b_max = b_max - 1;
+     end
+     for i=1:b_max;
+         for j=1:n_b;
+             f_bar(i) = f_bar(i) + f(n_b*(i-1)+j);
+             psd_xy_bar(i,:) = psd_xy_bar(i,:) + psd_xy(n_b*(i-1)+j,:);
+         end    
+     end
+     f_bar = 1/n_b*f_bar;
+     psd_xy_bar =1/n_b*psd_xy_bar;
+     for j=1:n_b_last;
+         f_bar(b_max+1) = f_bar(b_max+1) + f(n_b*b_max+j);
+         psd_xy_bar(b_max+1,:) = psd_xy_bar(b_max+1,:) + psd_xy(n_b*b_max+j,:);
+     end
+     
+     path_data = [PathName, '\results\power_spectrum_Bead', int2str(3), '_L', FileName, '.mat'];
+     load(path_data, 'data_psd', '-mat');
+     psd_xy_bar = data_psd(:,:,z);
+%      data_psd(:,:,z) = psd_xy_bar; 
+%      if (z==3)
+%         path_data = strrep(path, '.tif', '.mat');
+%         save(path_data, 'data_psd', '-mat');
+%      end
+     
+     if (n_b_last~=0)
+        b_max = b_max + 1; 
+        f_bar(b_max) = 1/n_b_last*f_bar(b_max);
+        psd_xy_bar(b_max,:) =1/n_b_last*psd_xy_bar(b_max,:);
+     end 
+    
+     f_plot = 10.^(0:log10(f_nyq)/b_max:log10(f_nyq));
+     f_plot_new = zeros(1,b_max);
+     for i=1:b_max
+         f_plot_new(i) = (f_plot(i)+f_plot(i+1))/2;
+     end
+   
+     f_plot = f_plot_new;
+     f_bar_plot(1:b_max-1) = 0;
+     psd_xy_bar_plot(1:b_max-1, 1:2) = 0;
+     n_b_plot = zeros(1, b_max - 1);
+     n_b_plot_prior = 0;
+     for i=1:b_max-1;
+        indices = find(f>=f_plot(i) & f<f_plot(i+1));
+        n_b_plot(i) = size(indices,2);
+        for j=1:n_b_plot(i);
+             f_bar_plot(i) = f_bar_plot(i) + f(n_b_plot_prior+j);
+             psd_xy_bar_plot(i,:) = psd_xy_bar_plot(i,:) + psd_xy(n_b_plot_prior+j,:);
+        end
+        if (n_b_plot(i) ~= 0)
+            f_bar_plot(i) = 1/n_b_plot(i)*f_bar_plot(i);
+            psd_xy_bar_plot(i,:) = 1/n_b_plot(i)*psd_xy_bar_plot(i,:);
+        else
+            f_bar_plot(i) = 0;
+            psd_xy_bar_plot(i,:) = 0;
+        end    
+      
+        n_b_plot_prior = n_b_plot_prior + n_b_plot(i);
+     end
+   end   
+   
+   psd_x_bar_plot = psd_xy_bar_plot(:,1)';
+   psd_y_bar_plot = psd_xy_bar_plot(:,2)';
+   %Bounds for graphical output in loglog plot
+   low_b_log = ceil((b_max-1)/log10(f_nyq)*log10(f_min));
+   up_b_log = ceil((b_max-1)/log10(f_nyq)*log10(f_max));
+   %Fitting only in the range of f_min - f_max.
+   lower_bound = ceil(b_max/f_nyq*f_min);
+   upper_bound = ceil(b_max/f_nyq*f_max);
+   if (n_b ~= 1)
+      f_fit = f_bar(lower_bound:upper_bound); 
+   else 
+      f_fit = f(lower_bound:upper_bound);
+   end
+       
+   %D0 is in units of µm^2/s and fc0 is in units of Hz.
+   D0 = 0.5;
+   fc0 = 150;
+   %param_0 contains initial values for fitting
+   param_0 = [D0, fc0];
+   lb = [1E-3, 30];
+   ub = [1E2, 1000];
+   
+   options = optimset('lsqcurvefit');
+   options = optimset(options, 'TolFun', 1E-28, 'TolX', 1E-22);
+   
+   %preallocating of arrays used in for-loop below
+   D_xy = zeros(1,2);
+   f_c_xy = zeros(1,2);
+   gamma_0_xy = zeros(1,2);
+   stiffness_power_xy = zeros(1,2);
+      
+   h = figure('Visible', 'off');
+   for k=1:2;
+       if (n_b ~= 1)
+           psd_fit = psd_xy_bar(lower_bound:upper_bound,k);
+       else    
+           psd_fit = psd_xy(lower_bound:upper_bound,k);
+       end    
+       [param, resnorm, residual, exitflag, output] = lsqcurvefit(@aliased_Lorentzian, param_0, f_fit', psd_fit', lb, ub, options);
+       D_xy(k) = param(1);
+       f_c_xy(k) = param(2);
+       %Calculation of errors for D and f_c
+       s_fc = sqrt(pi/(fun_u(f_min/f_c_xy(k), f_max/f_c_xy(k))-fun_v(f_min/f_c_xy(k), f_max/f_c_xy(k))));
+       s_D = sqrt(fun_u(f_min/f_c_xy(k), f_max/f_c_xy(k))/((1+pi/2)*(f_max/f_c_xy(k)-f_min/f_c_xy(k))))*s_fc;
+       u_fc(k) = s_fc/sqrt(pi*f_c_xy(k)*T_msr)*f_c_xy(k);
+       u_D(k) = sqrt((1+pi/2)/(pi*f_c_xy(k)*T_msr))*s_D*D_xy(k);
+       %Calculation of drag coefficients in units of g/s 
+       gamma_0_xy(k) = (1E15)*k_B*temp/D_xy(k);
+       u_gamma(k) = gamma_0_xy(k)*u_D(k)/D_xy(k);
+       %Calculation of stiffnesses for x- and y-values
+       stiffness_power_xy(k) = (1E3)*2*pi*f_c_xy(k)*gamma_0_xy(k);
+       u_stiffness(k) = stiffness_power_xy(k)*sqrt(u_fc(k)/f_c_xy(k) + u_gamma(k)/gamma_0_xy(k));
+       
+       
+       if (k==1) %
+          subplot(2,1,1),  errorbarloglog(f_bar_plot(low_b_log:up_b_log), psd_x_bar_plot(low_b_log:up_b_log), ...
+          psd_x_bar_plot(low_b_log:up_b_log) - 1/2*aliased_Lorentzian(param,f_bar_plot(low_b_log:up_b_log))./sqrt(n_b_plot(low_b_log:up_b_log)), ...
+          psd_x_bar_plot(low_b_log:up_b_log) + 1/2*aliased_Lorentzian(param,f_bar_plot(low_b_log:up_b_log))./sqrt(n_b_plot(low_b_log:up_b_log)), 'none', 'o', 'r'), 
+          xlabel('frequency [Hz]'), ylabel('power [µm²s]'), title('power spectral density for x-values'), ...
+          axis([f_min f_max min(psd_y_bar_plot(low_b_log:up_b_log)) max(psd_y_bar_plot(low_b_log:up_b_log))]), grid on, grid minor;
+          hold on
+          loglog(f_min:1:f_max, aliased_hydro_Lorentzian(param,f_min:1:f_max), 'r');
+          hold off
+       end
+       if (k==2)
+          subplot(2,1,2), errorbarloglog(f_bar_plot(low_b_log:up_b_log), psd_y_bar_plot(low_b_log:up_b_log) , ...
+          psd_y_bar_plot(low_b_log:up_b_log) - 1/2*aliased_Lorentzian(param,f_bar_plot(low_b_log:up_b_log))./sqrt(n_b_plot(low_b_log:up_b_log)), ...
+          psd_y_bar_plot(low_b_log:up_b_log) + 1/2*aliased_Lorentzian(param,f_bar_plot(low_b_log:up_b_log))./sqrt(n_b_plot(low_b_log:up_b_log)), 'none', 'o', 'r'), 
+          xlabel('frequency [Hz]'), ylabel('power [µm²s]'), title('power spectral density for y-values'), ...
+          axis([f_min f_max min(psd_y_bar_plot(low_b_log:up_b_log)) max(psd_y_bar_plot(low_b_log:up_b_log))]), grid on, grid minor;
+          hold on
+          loglog(f_min:1:f_max, aliased_hydro_Lorentzian(param,f_min:1:f_max), 'r');
+          hold off
+       end    
+   end
+   results = [f_c_xy; D_xy; gamma_0_xy; stiffness_power_xy];
+   errors = [u_fc; u_D; u_gamma; u_stiffness];
+   
+   saveas(h, path, 'tif')
+   close(h);
+   
+end
+
+function [u] = fun_u(x_1, x_2)
+  u = 2*x_2/(1+x_2^2)-2*x_1/(1+x_1^2)+2*atan((x_2-x_1)/(1+x_1*x_2));
+end
+
+function [v] = fun_v(x_1, x_2)
+  v = 4/(x_2-x_1)*atan((x_2-x_1)/(1+x_1*x_2))^2;
+end  
+
+

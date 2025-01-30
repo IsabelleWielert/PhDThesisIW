@@ -1,0 +1,374 @@
+function calib(handles)
+
+
+%Festlegung wichtiger Konstanten zur Berechnung der Federkonstanten
+k_boltzmann = 1.3806505E-23; %Boltzmannkonstante
+temp = 298.15; %Temperatur im Labor
+delta_T = 5; %Fehler der Temperatur
+delta_x = 5; %Fehler der Positionsbestimmung in nm
+delta_laser = 5;% std des Lasers in nm
+
+
+PathName = handles.path;
+FileName = handles.file;
+bead_radius = str2double(get(handles.radius,'String'));
+drift_button = get(handles.drift_on, 'Value');
+angle_button = get(handles.angle_on, 'Value');
+angle_step = str2double(get(handles.angular_range,'String'));
+f_s = str2double(get(handles.sampl_frequ,'String'));
+power_button = get(handles.power_on, 'Value');
+landscape_button = get(handles.landscape_on, 'Value');
+distr_button = get(handles.distr_on, 'Value');
+boltzmann_button = get(handles.boltzmann_on, 'Value');
+bin = str2double(get(handles.bin,'String'));
+camera = get(handles.camera_input,'Value');
+thres_factor = str2double(get(handles.threshold,'String'));
+velocity_stokes = str2double(get(handles.velocity,'String'));
+stokes_button = get(handles.stokes_button,'Value');
+
+
+if (FileName == 0)
+    %Öffnet Dialogfenster zur Eingabe der gewünschten multipage_tif-Datei
+    [FileName,PathName] = uigetfile('*.tif; *.bmp');
+    if (FileName == 0) & (PathName == 0);
+      return;
+    else
+        % Length of FileName
+        l_path = length(FileName);
+        % Ending of the image file (e.g. .bmp, .tif);
+        path_end = FileName(l_path-3:l_path);
+        % delete Ending of Filename
+        FileName = strrep(FileName, path_end, '');
+    end    
+end
+
+cd([PathName, '\results']);
+set(handles.data_output, 'String', 'Start of Calibration');
+drawnow
+
+%Strings für Tif- und txt-Datei:
+if (camera==1)
+   FileName = strrep(FileName, '_1', '');
+else
+   FileName = strrep(FileName, '_00001', '');
+end 
+file_path = [PathName, FileName];
+txt_file = [PathName, 'results\calib_data.txt'];
+tbl_file = [PathName, 'results\table_L', FileName, '.mat'];
+
+load(tbl_file, 'pos_list_all', '-mat');
+last_row = size(pos_list_all,1);
+frames = pos_list_all(last_row - 2, 1);
+num_input = pos_list_all(last_row - 2, 2);
+diam_px = pos_list_all(last_row - 2, 3);
+binning = pos_list_all(last_row - 1, 1);
+m = pos_list_all(last_row-1, 2);
+n = pos_list_all(last_row-1, 3);
+magni = pos_list_all(last_row, 1);%binning*0.0775668;%
+
+delta_mean_xy = sqrt(delta_x/sqrt(1000) + delta_laser^2);
+delta_data_corr = sqrt(delta_x^2 + delta_mean_xy^2);
+
+%   track-Routine
+%    input:
+%    1.Arg.: die zuvor generierte pos_list
+%    2.Arg.: Abschätzung der maximalen Weglänge in Pixel, die ein Bead
+%            innerhalb eines Zeitintervalls zurücklegt
+%    output:
+%    (frames*Nx4)-array:
+%           1. Spalte: x-Werte
+%           2. Spalte: y-Werte
+%           3. Spalte: frame
+%           4. Spalte: Bead
+tr = [];
+for k=1:num_input;
+    tr = vertcat(tr, pos_list_all(k:num_input:num_input*frames,1:2));
+end 
+% tr = track(pos_list_all(1:last_row-3,:), 3*diam_px, handles);
+
+%frame ist 1-dim. Feld und dient später beim plotting zur Zuordnung
+frame = 0 : (frames - 1);
+%Erzeugung und Öffnen des txt-Files 
+fid = fopen(txt_file,'w'); 
+%Überschrift der txt-Datei:
+fprintf(fid, 'Kalibrierung bei binning %1.0f und %4.0f frames\n\n\n', binning, frames);
+fprintf(fid, 'Durchmesser der Beads ist: %3.2fµm\n', diam_px*magni);
+
+if (angle_button==1)
+  %Es sollen später die Datenpunkte der Beadzentren in Polarkoordianten
+  %ausgedrückt werden. Daraufhin soll für einen bestimmten Winkelbereich
+  %die msd bzw. die Federkonstante bestimmt werden. angle_step ist der Winkelbereich 
+  %in Grad und angle_steps gibt die Anzahl der benötigten Schritte für einen 
+  %kompletten Umlauf an. 
+  angle_steps = 360/angle_step;
+  %msd_angle_corr(:,:) bzw. stiffness_angle(:,:) enthält die msd bzw. die Federkonstante
+  %für jeden Winkelbereich und jeden Bead  
+  msd_angle_corr(1:angle_steps,1:num_input) = 0;
+  stiffness_angle(1:angle_steps,1:num_input) = 0;
+end
+
+
+noise_corr(1:12,1) = [4.8, 4.5, 3.8, 4.0, 3.6, 3.3, 4.6, 4.3, 3.6, 3.2, 3.4, 4.0];
+noise_corr(1:12,2) = [6.4, 4.2, 3.3, 6.4, 4.5, 3.5, 6.4, 4.0, 3.2, 3.5, 4.5, 6.5];
+noise_corr(1:12,3) = [4.3, 3.1, 2.7, 5.9, 4.7, 3.3, 4.3, 2.9, 2.6, 3.2, 4.8, 5.7];
+
+noise_single(1:3,1) = [3.3, 2.5, 4.1];
+noise_single(1:3,2) = [5.1, 2.3, 5.6];
+noise_single(1:3,3) = [4.2, 2.2, 4.7];
+list=[];
+
+for i=1:num_input;
+      
+      subpxl = mod(tr(frames*(i-1)+1:frames*i,1:2), 1);
+      [n_x, h_x] = hist(subpxl(:,1),round(frames/10));
+      [n_y, h_y] = hist(subpxl(:,2),round(frames/10));
+      h = figure('Visible', 'off');
+      path_subpxl = [PathName, '\results\subpxl_bead', int2str(i), '_L', FileName, '.tif'];
+      subplot(1,2,1), bar(h_x, n_x/frames), ylabel('relative frequency'), ...
+         title(['Bead ',int2str(i),': Subpixel accuracy for x-values']), grid on, grid minor;
+      subplot(1,2,2), bar(h_y, n_y/frames), ylabel('relative frequency'), ...
+         title(['Bead ',int2str(i),': Subpixel accuracy for y-values']), grid on, grid minor;
+      saveas(h, path_subpxl, 'tif')
+      close(h);
+    
+      %data ist ein 2-dim. array das die x-Werte bzw. die y-Werte
+      %des jeweiligen i.-ten Beads enthält 
+      data =  magni*tr(frames*(i-1)+1:frames*i,1:2);
+      bead(1:frames) = i;
+      list = vertcat(list, horzcat(bead', frame', data));    
+      
+%       f1 = [67,44];
+%       f1 = f1./norm(f1);
+%       f3 = [-57, -3];
+%       f3 = f3./norm(f3);
+%       i
+%       if i==1
+%           av_1 = mean(data(9100:9600,:));
+%           for q=1:frames
+%               proj_ar_1(q) = f1*(data(q,:)-av_1)';
+%           end
+%       end
+%       if i==3
+%           av_3 = mean(data(9100:9600,:));
+%           for q=1:frames
+%               proj_ar_3(q) = f3*(data(q,:)-av_3)';
+%           end
+%       end
+      
+       
+      %%%%%%%%%%%%%%%%%%%%%%%%%%% Driftkorrektur %%%%%%%%%%%%%%%%%%%%%%%%%%%
+      %data_corr enthält für Berechnung der Abstände r in Polarkoordinaten bzw. für spätere Ermittlung der msd bzw.
+      %Federkonstanten die relevanten Daten nach Driftkorrektur. Außerdem
+      %werden Ergebnisse in einer Graphik veranschaulicht, die abgespeichert wird 
+      if (drift_button==1)
+           set(handles.data_output, 'String', ['Bead ', int2str(i),'/', ...
+               int2str(num_input), '. Calculation: Driftcorrection.']);
+           drawnow
+           path_drift = [PathName, '\results\calib_Bead', int2str(i), ...
+               '_L', FileName, '.fig'];
+           [slope, slope_corr, data_corr(:,1:2,i), mean_xy(i,1:2)] = ...
+               driftcorrection(path_drift, i, frame, data');
+      else
+          mean_xy(i,1:2) = mean(data);
+          
+          data_corr(:,1,i) = data(:,1) - mean_xy(i,1);
+          data_corr(:,2,i) = data(:,2) - mean_xy(i,2);
+          
+          [lin_fit, errors] = polyfit(frame, data(:,1)', 1);
+          slope(1) = lin_fit(1);
+          [lin_fit, errors] = polyfit(frame, data(:,2)', 1);
+          slope(2) = lin_fit(1);
+      end 
+      
+      
+      if (power_button == 1)
+          set(handles.data_output, 'String', ['Bead ', int2str(i),'/', ...
+              int2str(num_input), '. Calculation: Power spectral density.']);
+          drawnow
+          [results, errors] = psd(PathName, FileName, i, ...
+              data_corr(:,1:2,i), temp, handles);
+          results_all(:,:,i) = results;
+          errors_all(:,:,i) = errors;
+      end
+      
+      if (stokes_button == 1)
+          set(handles.data_output, 'String', ['Bead ', int2str(i),'/', ...
+           int2str(num_input), '. Calculation: Shifts for Stokes calibration.']);
+          drawnow
+          calc_stokes_shifts(PathName, FileName, i, frame, ...
+            data_corr(:,2,i)', velocity_stokes, thres_factor, bead_radius);
+      end
+      %data_corr(1:frames,3,i) enthält den Betrag r und data_corr(1:frames,4,i)
+      %den Winkel phi des i-ten Beads unter Verwendung von Polarkoordinaten: x = r*cos(phi), y=r*sin(phi).
+      data_corr(1:frames,3,i) = sqrt(data_corr(1:frames,1,i).^2 + data_corr(1:frames,2,i).^2);
+      if (angle_button==1)
+        set(handles.data_output, 'String', ['Bead ', int2str(i),'/', ...
+            int2str(num_input), '. Calculation: Angle dependent stiffnesses.']);
+        drawnow
+        for k=1:frames
+          if (data_corr(k,1,i)>0 & data_corr(k,2,i)>0)
+             data_corr(k,4,i) = atand(data_corr(k,2,i)./data_corr(k,1,i));
+          elseif (data_corr(k,1,i)<0 & data_corr(k,2,i)>0)    
+             data_corr(k,4,i) = -atand(data_corr(k,2,i)./data_corr(k,1,i)) + 90;
+          elseif (data_corr(k,1,i)<0 & data_corr(k,2,i)<0)
+             data_corr(k,4,i) = atand(data_corr(k,2,i)./data_corr(k,1,i)) + 180;
+          else
+             data_corr(k,4,i) = atand(data_corr(k,2,i)./data_corr(k,1,i)) + 360;
+          end    
+        end
+        
+        %Bestimmung der msd_angle_corr (hier in m^2) und der Federkonstanden
+        %innerhalb des definierten Winkelbereiches
+        for j=1:angle_steps;
+           indices = find((data_corr(1:frames,4,i) > angle_step*(j-1)) & (data_corr(1:frames,4,i) <= angle_step*j));
+           sz_indices = size(indices);
+           frames_angle(j) = sz_indices(1);
+           if (frames_angle(j) ~= 0)
+                for k=1:frames_angle(j);
+                    msd_angle_data(k) = data_corr(indices(k), 3, i);
+                end    
+              msd_angle = (1.0E-6)^2*mean(msd_angle_data.^2);
+              %Korrektur der msd_angle aufgrund der Instabilität des Laserfokus mit einer Standardabweichung von 8nm
+              msd_angle_corr(j) = msd_angle;% - (noise_corr(j,i)*1E-9)^2;
+              %Berechnung der Federkonstanten   
+              stiffness_angle(j,i) = k_boltzmann*temp/msd_angle_corr(j);   
+              msd_angle_data = [];
+           end
+        end
+      end  
+ %Berechnung der msd aus den x- bzw.  y-Werten und den Abständen r: 
+ delta_x_squared(1:frames, 1:3) = 2*abs(data_corr(1:frames,1:3,i)*1E3)*delta_data_corr;
+ delta_msd(1:3) = (1E-18)*mean(delta_x_squared)/sqrt(frames);
+ 
+ for k = 1:3;
+    msd(k) = (1.0E-6)^2*mean(data_corr(1:frames,k,i).^2);
+ end   
+    msd_corr(1) = msd(1);% -  (5.0*1E-9)^2;
+    msd_corr(2) = msd(2);% -  (4.1*1E-9)^2;
+    msd_corr(3) = msd(3);% - sqrt((3.7*1E-9)^4 + (5.9*1E-9)^4);
+ for k=1:3;   
+    stiffness(i,k) = k_boltzmann*temp/msd_corr(k);   
+    error_stiff(k) = sqrt((k_boltzmann/msd_corr(k)*delta_T)^2 + ...
+        (delta_msd(k)*k_boltzmann*temp/(msd_corr(k)^2))^2);
+ end
+   
+ % Schreiben der Daten der Kalibrierung in txt.-File
+ fprintf(fid, '\nBead %1.0f (%4.3fµm/%4.3fµm):\n', i, mean_xy(i,1), mean_xy(i,2));
+ fprintf(fid, 'Steigung des Drifts in x-Richtung: %+1.10fµm/frame\n', slope(1));
+ fprintf(fid, 'Steigung des Drifts in y-Richtung: %+1.10fµm/frame\n', slope(2));
+ if (drift_button==1)
+    fprintf(fid, 'Steigung der korrigierten x-Werte: %+1.10fµm/frame\n',slope_corr(1));
+    fprintf(fid, 'Steigung der korrigierten y-Werte: %+1.10fµm/frame\n\n', slope_corr(2));
+ end   
+ fprintf(fid, 'Standardabweichung für x-Werte: (%3.4f +/-%3.4f)nm\n', ...
+     (1.0E9)*sqrt(msd_corr(1)), 1E9/(2*sqrt(msd_corr(1)))*delta_msd(1));
+ fprintf(fid, 'Federkonstante kappa für x-Werte: (%1.6f+/-%1.6f)pN/nm\n', ...
+     (1.0E3)*stiffness(i,1), (1.0E3)*error_stiff(1));
+ fprintf(fid, 'Standardabweichung sigma für y-Werte: (%3.4f+/-%3.4f)nm\n', ...
+     (1.0E9)*sqrt(msd_corr(2)), 1E9/(2*sqrt(msd_corr(2)))*delta_msd(2));
+ fprintf(fid, 'Federkonstante kappa für y-Werte: (%1.6f+/-%1.6f)pN/nm\n\n', ...
+     (1.0E3)*stiffness(i,2), (1.0E3)*error_stiff(2));
+ fprintf(fid, 'Standardabweichung für Abstand r: (%3.4f+/-%3.4f)nm\n', ...
+     (1.0E9)*sqrt(msd_corr(3)), 1E9/(2*sqrt(msd_corr(3)))*delta_msd(3));
+ fprintf(fid, 'Federkonstante kappa: (%1.6f+/-%1.6f)pN/nm\n\n', ...
+     2*(1.0E3)*stiffness(i,3), 2*(1.0E3)*error_stiff(3));
+ if (angle_button==1)
+   fprintf(fid, 'Frames pro Winkelbereich bei Gleichverteilung: %4.2f\n\n', frames/angle_steps);
+   fprintf(fid, 'phi[Grad]    frames        StD[nm]    kappa[pN/nm]\n');
+   for j=1:angle_steps;
+      fprintf(fid, '%3.0f-%3.0f    %4.0f(%+2.1f%%)      %3.3f      %1.4f\n', (j-1)*angle_step, j*angle_step, ...
+      frames_angle(j), 100*(frames_angle(j)/(frames/angle_steps)-1), (1.0E9)*sqrt(msd_angle_corr(j)), ...
+      2*(1.0E3)*stiffness_angle(j,i));
+   end
+ end  
+ if (power_button == 1)
+    fprintf(fid, '\n\nResults of power spectrum analysis:\n\n');
+    fprintf(fid, 'Diffusion constant D for x-values:  (%3.2e+/-%3.0e)µm²/s\n', results(2,1), errors(2,1));
+    fprintf(fid, 'Diffusion constant D for y-values:  (%3.1e+/-%3.0e)µm²/s\n', results(2,2), errors(2,2));
+    fprintf(fid, 'Corner frequency f_c for x-values:  (%3.1f+/-%3.1f)Hz\n', results(1,1), errors(1,1));
+    fprintf(fid, 'Corner frequency f_c for y-values:  (%3.1f+/-%3.1f)Hz\n', results(1,2), errors(1,2));
+    fprintf(fid, 'Stiffness of the trap for x-values:  (%1.4f+/-%1.4f)pN/nm\n', results(4,1)/1000, errors(4,1)/1000);
+    fprintf(fid, 'Stiffness of the trap for y-values:  (%1.4f+/-%1.4f)pN/nm\n', results(4,2)/1000, errors(4,2)/1000);
+    fprintf(fid, 'Drag coefficient of the bead for x-values:  (%3.2e+/-%3.0e)g/s\n', results(3,1), errors(3,1));
+    fprintf(fid, 'Drag coefficient of the bead for y-values:  (%3.2e+/-%3.0e)g/s\n\n', results(3,2), errors(3,2));
+ end    
+end
+
+
+% % 
+% path_corr = [PathName, 'results\crosscorrelation_', FileName];
+% calculate_crosscorr(path_corr, data_corr, mean_xy, frames, (1E6)*stiffness(:,1:2), f_s)
+      
+if (landscape_button==1)
+  set(handles.data_output, 'String', 'Calculation: Potential energy landscape for angle dependent stiffnesses.');
+  drawnow  
+  %3D-Ausgabe der 2 dim. Potentialfunktionen
+  path_land = [PathName, '\results\potential_angle_L', FileName, '.tif'];
+  draw_3Dpotentials(path_land, num_input, diam_px, magni, angle_steps, angle_step, mean_xy, stiffness_angle);
+end
+
+
+%Berechnung der 2-dim. Verteilung aller Beadzentren
+[distr, distr_xy] = calc_2Ddistribution(num_input, frames, magni, data_corr, mean_xy, m, n, bin);
+
+if (distr_button==1)
+  
+  fprintf(fid, '\nTable Stiffnesses\n\n');
+  fprintf(fid, 'Bead #    std[pN/µm]    Gauß[pN/µm]    psd[pN/µm]     D[µm^2/s]   gamma[g/s]     f_c[Hz]     f_min[Hz]     f_max[Hz]\n');
+  calib_results={'Bead #', 'Pos_x', 'Pos_y', 'std[pN/µm]', ...
+      'Gauß[pN/µm]', 'Error[pN/µm]', 'R^2', 'psd[pN/µm]', 'Error[pN/µm]',...
+    'R^2', 'D[µm^2/s]', 'Error[µm^2/s]', 'gamma[g/s]', 'Error[g/s]','f_c[Hz]', ...
+    'Error[Hz]', 'f_min[Hz]', 'f_max[Hz]', '# of av. Datapoints','# Blocks'};
+  for i=1:num_input;  
+      %Graphische Ausgabe der Distributionen
+      set(handles.data_output, 'String', ['Bead ', int2str(i),'/', ...
+               int2str(num_input), 'Calculation: probability distributions.']);
+      drawnow
+      [results_gauss, error_gauss]= draw_2Ddistribution(PathName, FileName, distr,...
+          distr_xy, frames, bin, mean_xy, magni, diam_px, i);
+      fprintf(fid, '%02.0f           %02.1f           %02.1f          %02.1f           %03.2e    %03.2e       %03.0f        %04.0f      %04.0f\n',...
+          i, mean(stiffness(i,1:2))*1.0E6, mean(results_gauss(1,:))*1000, ...
+          mean(results_all(4,1:2,i)),   mean(results_all(2,1:2,i)),  ...
+          mean(results_all(3,1:2,i)), mean(results_all(1,1:2,i)), ...
+          results_all(5,1,i), results_all(5,2,i));    
+      
+      calib_results = vertcat(calib_results, {i, mean_xy(i,1), mean_xy(i,2),...
+          mean(stiffness(i,1:2))*1.0E6, mean(results_gauss(1,:))*1000, ...
+          mean(error_gauss)*1000, min(results_gauss(2,:)),...
+          mean(results_all(4,:,i)), mean(errors_all(4,:,i)), ...
+          min(results_all(6,:,i)), mean(results_all(2,:,i)),  ...
+          mean(errors_all(2,:,i)), mean(results_all(3,:,i)), ...
+          mean(errors_all(3,:,i)), mean(results_all(1,:,i)), ...
+          mean(errors_all(1,:,i)), results_all(5,1,i), ...
+          results_all(5,2,i), results_all(7,1,i), results_all(7,2,i)});
+  end
+  xlswrite('calib_data.xls', calib_results)
+end
+
+
+
+fclose(fid);
+
+if (boltzmann_button==1)
+  set(handles.data_output, 'String', 'Calculation: Boltzmann distribution based on probability distribution.');
+  drawnow
+  %Berechnung des Potentials über Boltzmann-Verteilung:
+  %Potential ist proportional zum wahren Potential U(x)=-k_b*T*exp(P(x)), wobei P(x) die Wahrschinlichkeit darstellt
+  %den Bead am Ort x anzutreffen. Einheit: pN*µm
+  potential = -(1.0E18)*k_boltzmann*temp*log((distr + 1)/frames);
+
+  %Graphische Ausgabe der Boltzmann-Verteilungen
+  for i=1:num_input;
+     path_boltz = [PathName, '\results\potential_bead', int2str(i),'_L', FileName, '.tif']; 
+     draw_3Dboltzmann(path_boltz, potential, bin, mean_xy, magni, diam_px,i);
+  end   
+end
+
+set(handles.data_output, 'String', 'End of Calibration!');
+drawnow
+
+
+assignin('base', 'pos_list', list)
+assignin('base', 'proj_ar', horzcat(frame', proj_ar_1', proj_ar_3'))
+xlswrite('pos_list.xls', list)
+%xlswrite('projection_array.xls', horzcat(frame', proj_ar_1', proj_ar_3'));

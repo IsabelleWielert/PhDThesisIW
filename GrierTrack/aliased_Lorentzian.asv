@@ -1,0 +1,15 @@
+function phy_power_aliased = aliased_Lorentzian(param, f_s, f)
+
+%D is the difussion constant and f_c is the corner frequency
+D = param(1);
+f_c = param(2);
+index_max = length(f);
+n_max = 1000;
+phy_power_aliased(1:index_max) = 0;  
+for index=1:index_max;
+    for n=-n_max:n_max;
+        phy_power_aliased(index) = phy_power_aliased(index) + D/(pi^2*(f_c^2 + (f(index)+n*f_s)^2));
+    end  
+end
+
+end

@@ -1,0 +1,24 @@
+function [distr, distr_xy] = calc_2Ddistribution(num_input, frames, magni, data_corr, mean_xy, m, n, bin)
+
+%distr ist ein 2-dim. (bin*m,bin*n)-array, dass später graphisch dargestellt werden soll, wobei jedes Element des
+%arrays für einen Pixel steht und diese Elemente zuert auf Null gesetzt
+%werden. Später werden die Beadzentren gezählt, die in ein solchen
+%Pixelfeld fallen.
+distr(1:bin*m,1:bin*n) = 0;
+n_bin = -0.19:0.001:0.19;
+distr_xy = zeros(length(n_bin),2,num_input);
+
+for i=1:num_input;
+  %Folgende Schleife geht alle frames durch, betrachtet jeden x- bzw. y-Wert und bestimmt mit dem floor-Befehl
+  %die jeweiligen Indizes für das distr-Feld
+  for k=1:frames;
+      find_bm = floor(bin/magni*(data_corr(k,2,i) + mean_xy(i,2))) + 1;
+      find_bn = floor(bin/magni*(data_corr(k,1,i) + mean_xy(i,1))) + 1;
+      distr(find_bm, find_bn) = distr(find_bm, find_bn) + 1;
+  end
+  for j=1:2;
+      distr_xy(:,j,i) = hist(data_corr(:,j,i),n_bin);
+  end   
+end
+
+end

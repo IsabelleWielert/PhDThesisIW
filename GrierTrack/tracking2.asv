@@ -1,0 +1,247 @@
+%*****************************************************************************************
+%Dieses Programm trackt Beads (gefangen in HOT) beliebiger Zahl aber definierten Größe
+%in einem multipage_tif-file beliebiger frame-Zahl.
+%
+%input:
+%      frames - Anzahl der Bilder der multipage_tif-Datei
+%      num_input - Anzahl der Beads, die getrackt werden sollen
+%      pass_limit (optional) - Band_pass Limit (0 - 30); preset: band_pass = 11
+%      magni (optional) - magnification of the objective (50, 60, 100); preset magni = 60
+%      diameter (optional) - Diameter of the Beads in Pixel
+%      binning (optional) - Binning of the frames (1 - 4)
+%
+% Zum Tracken werden Routinen der Griergroup verwendet (bpass, pkfind, cntrd, track).
+% bpass filtert das einzelne Bild; pkfind gibt die vorläufigen Koordinaten der
+% gefundenen Beads zurück; cntrd berechnet Zentrum der Beads mit subpixel
+% Genauigkeit. Daraufhin wird mit track ein Datenfeld tr erzeugt, dessen 
+% Inhalt folgende Bedeutung hat:
+% Spalte   Bedeutung
+%   1      x-Koordinate des jeweiligen Beads
+%   2      y-Koordinate des jeweiligen Beads
+%   3      frame des jeweiligen Beads
+%   4      Numer des Beads
+%
+%output:
+%       'n' tif-files: Für 'n' getrackte Beads werden n Graphen gespeichert, die jeweils
+%                      frame gegen x- bzw. y-Werte darstellen ohne und mit
+%                      Driftkorrektur.
+%       txt-file: Enthält Koordinaten der Beads, Steigung des Drifts bzw. nach Drift- 
+%                 korrektur, Standardabweichung und Federkonstante für jeden 
+%                 Bead und für x-Koordinaten und y-Koordinaten
+%
+%       Ausgegebene Dateien werden in Ordner der multipage_tif-Datei
+%       gespeichert!!
+%******************************************************************************************
+function tracking(frames, num_input, pass_limit, magni_input, diameter, binning)
+
+if (nargin < 2) | (nargin > 6)
+    fprintf(1, 'Wrong number of arguments!\n 1. Arg.: Number of Frames\n 2. Arg.: Number of Beads\n 3. Arg. (optional): ');
+    fprintf(1, 'Bandpass Limit (1 - 30); preset: band_pass = 11\n 4. Arg. (optional): magnification of the objective (50, 60, 100);');
+    fprintf(1, ' preset: magni = 60\n 5. Arg. (optional): Diameter of the Beads in Pixel (5 - 35); preset: diameter = 33\n'); 
+    fprintf(1, ' 6. Arg. (optional): Binning of the frames (1 -4) ; preset: binning = 1\n'); 
+    return;
+end    
+if (nargin==2)
+    pass_limit = 11; 
+    magni_input = 60;
+    diameter = 33;
+    binning = 1;
+elseif (nargin==3) 
+    magni_input = 60;
+    diameter = 33;
+    binning = 1;
+elseif (nargin==4)
+   diameter = 33;
+   binning = 1;
+elseif (nargin==5)
+    binning = 1;
+end    
+if (pass_limit <= 0) | (pass_limit > 30)
+    fprintf(1, 'Bandpass is out of range (0 - 30)!!\n');
+    return;
+end    
+if (binning <= 0) | (binning > 4)
+    fprintf(1, 'Binning is out of range (1 - 4)!!\n');
+    return;
+end 
+if (diameter < 5) | (diameter > 35)
+    fprintf(1, 'Diameter of the Beads is out of range (5 - 35)!!\n');
+    return;
+end
+%Öffnet Dialogfenster zur Eingabe der gewünschten multipage_tif-Datei
+[FileName,PathName] = uigetfile('*.tif');
+if (FileName == 0) & (PathName == 0);
+    return;
+end    
+file_path = [PathName, FileName];
+%Pfad für txt-Datei
+txt_file = [PathName, 'Kalibrierung.txt'];
+
+%Festlegung wichtiger Konstanten zur Berechnung der Federkonstanten
+%magni ist Vergrößerungsfaktor des Objektivs
+switch magni_input
+    case 60
+        magni = binning*0.03894775777;
+    case 100
+        magni = binning*0.07756686399;
+    case 50
+        magni = binning*0.03894; %noch nicht kalibriert!!
+    otherwise
+        fprintf(1, 'Wrong objective magnification! Please choose 50, 60 or 100.\n');
+        return;
+end        
+k_boltzmann = 1.3806505E-23; %Boltzmannkonstante
+temp = 293.15; %Temperatur im Labor
+%frame ist 1dim Feld und dient später beim plotting zur Zuordnung
+frame = 0 : (frames - 1);
+num_beads = num_input;
+
+k=0;
+%Diese for-Schleife liest Bilder aus, findet Beads und speichert Daten
+%am Ende aus jedem Bild in ein einziges Array "pos_1st".
+%Zusätzlich ist eine Sicherung eingebaut. Falls die gefundene Anzahl an
+%Beads "num_beads" nicht mit "num_input" übereinstimmt, soll Schleife
+%verlassen werden. Außerdem wird frame 1 mit gefundenen Koordinaten
+%ausgegeben, damit an figure(4) das "tracking" überprüft werden kann!
+for i=1:frames;  
+  img = double(imread(file_path,i));
+  img_filter = bpass(img,1, pass_limit);
+  max_bright = max(max(img_filter)); 
+  thrh =  max_bright - max_bright/3;
+  pk = pkfnd(img_filter,thrh, diameter);
+  cnt = cntrd(img_filter,pk, diameter);
+  num_beads = size(cnt,1); %Anzahl der getrackten Beads    
+  while (num_beads > num_input)
+      pass_limit = pass_limit + 1;
+      if (pass_limit >= 50)
+          fprintf(1, 'bandpass limit is too big (>=50)\n');
+          break;
+      end    
+      img_filter = bpass(img,1, pass_limit);
+      max_bright = max(max(img_filter)); 
+      thrh =  max_bright - max_bright/3;
+      pk = pkfnd(img_filter,thrh, diameter);
+      cnt = cntrd(img_filter,pk, diameter);
+      num_beads = size(cnt,1);
+  end
+  while (num_beads < num_input)
+      pass_limit = pass_limit - 1;
+      if (pass_limit <= 0)
+          fprintf(1, 'bandpass limit is too small (<=0)\n');
+          break;
+      end    
+      img_filter = bpass(img,1, pass_limit);
+      max_bright = max(max(img_filter)); 
+      thrh =  max_bright - max_bright/3;
+      pk = pkfnd(img_filter,thrh, diameter);
+      cnt = cntrd(img_filter,pk, diameter);
+      num_beads = size(cnt,1);
+  end
+  fprintf(1, 'frame: %1.0f; threshold: %4.2f; bandpass limit: %4.0f\n', i, thrh, pass_limit);
+  fprintf(1, '%4.0f features were found\n', num_beads);
+  if (i == 1);
+      figure(4),
+      colormap('gray'),
+      imagesc(img_filter);
+      hold on
+      plot (cnt(:,1), cnt(:,2), '+r');
+      hold off
+  end
+  if (num_beads ~= num_input)
+      break;
+  end    
+  for j=1:num_beads
+     if k==0;
+       pos_lst=[cnt(j,1:2),i];
+     else
+       pos_lst=[pos_lst;cnt(j,1:2),i];
+     end
+  k=1;
+  end
+end
+
+if (num_beads < num_input)
+   fprintf(1, 'Only %4.0f features were found in frame %4.0f!\n', num_beads, i);
+   fprintf(1, 'Change the parameter please.\n');
+   return
+elseif (num_beads > num_input)
+   fprintf(1, 'Too many features (%2.0f) were found in frame %4.0f!\n',num_beads, i);
+   fprintf(1, 'Change the parameter please.\n');
+   return 
+end  
+
+%Routine track erhält als input:
+%    pt         - enthält die Daten des generierten gdf-files
+%    5          - Sollte ca. dem maximalen Abstand zwischen den Beads entsprechen. Wichtig:
+%                 Dieser Wert darf nicht zu groß gewählt werden, da sonst der Rechenaufwand
+%                 sichdeutlich erhöht
+tr = track(pos_lst, 30);
+fid = fopen(txt_file,'w'); 
+
+%Folgende verschachtelte for-Schleifen berechnen für jeden Bead (jeweils für x- und y- Koor-
+%dinaten) über routine linfit die Driftkorrektur. Zusätzlich werden getrackte Werte, deren Ab-
+%stand vom Mittelwert bzgl. der jeweiligen Achse aus dem Vertrauensintervall (confi,s.o.) heraus-
+%fallen, nicht mit in die Kalibrierung aufgenommen!
+%Erste for-Schleife geht von 1 bis Anzahl der Beads; In zweiter Schleife steht j=0 für Kalibrierung
+%für x-Werte und j=2 für Kalibrierung der y-Werte
+
+
+for i=1:num_beads;
+   for j=1:2;
+      data =  magni*tr(frames*(i-1)+1:frames*i,j)';
+      [lin_fit,errors1] = polyfit(frame, data, 1);
+      slope(j) = lin_fit(1);
+
+      %Berechung der Driftkorrektur mithilfe der Steigung aus linfit
+      corr = data - lin_fit(1)*frame;
+
+      [lin_fit_corr, errors2] = polyfit(frame, corr, 1);
+      slope_corr(j) = lin_fit_corr(1);
+
+      %Berechung des Mittelwerts
+      mean_corr_xy(j) = mean(corr);
+      %Berechnung der mean sqared displacement
+      msd = (1.0E-6)^2*var(corr);
+
+      %Korrektur der msd aufgrund der Instabilität des Laserfokus mit einer Standardabweichung von 8nm
+      msd_corr(j) = msd - (8E-9)^2;
+
+      %Berechnung der Federkonstanten
+      stiffness(j) = k_boltzmann*temp/msd_corr(j);
+
+      if j == 1
+         figure(i), subplot(2,2,1), plot( frame, data,'+r'), xlabel('frames'), ylabel('x-Werte'), title(['Bead ',int2str(i),': x-Werte ohne Driftkorrektur']);
+         hold on
+         plot(frame, lin_fit(2) + lin_fit(1)*frame, '-k')
+         hold off
+         figure(i), subplot(2,2,2), plot(frame, corr, '*r'),xlabel('frames'), ylabel('x-Werte'), title(['Bead ',int2str(i),': x-Werte mit Driftkorrektur']);
+         hold on
+         plot(frame, lin_fit_corr(2) + lin_fit_corr(1)*frame, '-k')
+         hold off
+      end
+      if j == 2
+         figure(i), subplot(2,2,3), plot(frame, data, '+r'), xlabel('frames'), ylabel('y-Werte'), title(['Bead ',int2str(i),': y-Werte ohne Driftkorrektur']);
+         hold on
+         plot(frame, lin_fit(2) + lin_fit(1)*frame, '-k')
+         hold off
+         figure(i), subplot(2,2,4), plot(frame, corr, '*r'), xlabel('frames'), ylabel('y-Werte'), title(['Bead ',int2str(i),': y-Werte mit Driftkorrektur']);
+         hold on
+         plot(frame, lin_fit_corr(2) + lin_fit_corr(1)*frame, '-k')
+         hold off
+         saveas(i, [PathName, 'calib_Bead', int2str(i)], 'tif')
+      end
+   end 
+   % Schreiben der Daten der Kalibrierung in txt.-File
+         fprintf(fid, 'Bead %1.0f (%4.2fµm/%4.2fµm):\n', i, mean_corr_xy(1), mean_corr_xy(2));
+         fprintf(fid, 'Steigung des Drifts in x-Richtung: %1.10fµm/frame\n', slope(1));
+         fprintf(fid, 'Steigung des Drifts in y-Richtung: %1.10fµm/frame\n', slope(2));
+         fprintf(fid, 'Steigung der korrigierten x-Werte: %1.10fµm/frame\n',slope_corr(1));
+         fprintf(fid, 'Steigung der korrigierten y-Werte: %1.10fµm/frame\n', slope_corr(2));
+         fprintf(fid, 'Standardabweichung sigma für x-Werte: %3.4fnm\n', (1.0E9)*sqrt(msd_corr(1)));
+         fprintf(fid, 'Federkonstante kappa für x-Werte: %2.4fpN/µm\n', (1.0E6)*stiffness(1));
+         fprintf(fid, 'Standardabweichung sigma für y-Werte: %2.4fnm\n', (1.0E9)*sqrt(msd_corr(2)));
+         fprintf(fid, 'Federkonstante kappa für y-Werte: %2.4fpN/µm\n\n', (1.0E6)*stiffness(2));
+end
+fclose(fid);
+end 
+

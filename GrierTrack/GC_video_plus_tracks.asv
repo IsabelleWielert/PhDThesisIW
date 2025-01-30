@@ -1,0 +1,90 @@
+function GC_video_plus_tracks(tr, frames, fps, binning, camera)
+   
+  
+    %open dialog for choosing the first tif-image in the desired folder
+    [FileName,PathName] = uigetfile('*.tif; *.bmp');
+    %if cancel is pushed, then return.
+    if (isscalar(FileName) == 1) && (isscalar(PathName) == 1);
+        return;
+    end  
+    file_path = [PathName, FileName];
+    % Ending of the image file (e.g. .bmp, .tif);
+    path_end = FileName(end-3:end);
+
+    % pixel factor for absolute lengthscales
+    switch camera
+        case 1 %100x oil immersion objective (TIRF)
+            magni = binning*0.160;
+        case 2 %100x oil immersion objective (Confocal)
+            magni = binning*0.099;%0.134196;%0.2017%0.0775668; 
+    end        
+     
+   
+    if (isdir([PathName, 'results_', FileName(1:end-4)])==0)
+        mkdir([PathName, 'results_', FileName(1:end-4)]);   
+    end
+        
+    cd([PathName, 'results_', FileName(1:end-4)]);
+    
+    
+    tr(:,1:2) = tr(:,1:2)/magni;
+    
+    tr_max = max(tr(:,4));
+    
+    multi_tif_path = [FileName(1:end-4), '_plus_tracks', path_end];
+    
+    img = double(imread(file_path,1));   
+    
+    figure(1),
+    %set(1,'nextplot','replacechildren');
+    axis([0 size(img,2) 0 size(img,1)]),
+    set(1, 'Position', [1,100, size(img,2), size(img,1)]);
+    axes('Position', [0,0,1,1]); 
+    
+    colormap('gray'),
+    
+    for i=1:frames
+        img = double(imread(file_path,i)); 
+        imagesc(img);
+        hold on
+        text(10,30, num2str(i/10, '%1.1fs'),'FontSize', 16); 
+        hold on
+        for j=1:tr_max
+            win = 100;
+            ind_tr = [];
+            ind_tr = find(tr(:,4)==j);
+            if (i == frames)
+                    plot(tr(ind_tr,1), ...
+                        tr(ind_tr,2), '-k'),
+            else
+                if length(ind_tr)<win
+                    win = length(ind_tr);
+                end
+                ind_fr = find(tr(ind_tr,3)==i);
+                if (isempty(ind_fr)==0)
+                    if (ind_fr <= win/2)
+                        plot(tr(ind_tr(1:ind_fr+win/2),1), tr(ind_tr(1:ind_fr+win/2),2), ...
+                            '-k'),
+                    elseif (ind_fr > win/2 && ind_fr <= length(ind_tr)-win/2)
+                        plot(tr(ind_tr(ind_fr-win/2:ind_fr+win/2),1), ...
+                            tr(ind_tr(ind_fr-win/2:ind_fr+win/2),2), '-k'),
+                    elseif (ind_fr > win/2 && ind_fr > length(ind_tr)- win/2)
+                        plot(tr(ind_tr(ind_fr-win/2:end),1), ...
+                            tr(ind_tr(ind_fr-win/2:end),2), '-k'),
+                    end                   
+                    text(tr(ind_tr(1) + ind_fr,1) +10, tr(ind_tr(1) + ind_fr,2),...
+                        int2str(j),'Color', 'k', 'FontSize', 12);
+                end
+            end
+            hold on
+        end
+        hold off
+        
+        frame = getframe(gcf);
+        [img,Map] = frame2im(frame);
+        img = rgb2gray(img);
+        %generation of a 8-bit multi-image tiff-file with tracks
+        imwrite(uint8(img), multi_tif_path, 'tif', ...
+                'WriteMode', 'append', 'Compression', 'none')
+    end
+end

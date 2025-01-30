@@ -1,0 +1,85 @@
+
+num_beads = 3;
+data = Sheet1(:,3:4);
+
+frames = size(data,1)/num_beads;
+b1_min_y = min(data(1:100,2));
+ind_b1_y = find(data(1:frames,2)>b1_min_y+2);
+data_tmp = data(ind_b1_y,1:2);
+data(ind_b1_y,1:2) = data(frames+ind_b1_y, 1:2);
+data(frames+ind_b1_y, 1:2) = data_tmp;
+
+% data(1:100,:)=[];
+% data(frames-99:frames,:)=[];
+% data(2*frames-199:2*frames-100,:)=[];
+% frames = frames - 100;
+thres_factor = 0.7;
+h_nm = 50;
+steps = 10;
+threshold = thres_factor*(h_nm/1000);
+
+
+data(:,2) = abs(data(:,2)-max(data(:,2)));
+% mean_pos = mean(data(1:100,1:2));
+% data(:,1) = data(:,1) - mean_pos(1);
+% data(:,2) = data(:,2) - mean_pos(2);
+figure(2)
+plot(data(:,1), data(:,2), 'r*');
+index = 0;
+step_ind = 1;
+for i=1:num_beads
+    data_0(1:frames,(i-1)*2 + 1:(i-1)*2 + 2) = data((i-1)*frames+1:i*frames,:);
+end
+list=[];
+mean_0 = mean(data_0(1:10,:));
+
+k=2;
+for j=1:steps:frames-steps;
+    %for k=1:num_beads
+       data_curr = data_0(j:j+steps-1,(k-1)*2 + 1:(k-1)*2 + 2);
+       mean_xy = mean(data_curr);
+       mean_s = sqrt((mean_xy(1)-mean_0((k-1)*2 + 1))^2 + (mean_xy(2)-mean_0((k-1)*2 + 2))^2);
+       if(mean_s > threshold && step_ind < j-steps)
+          if j<size(data,1)
+              mean_0 = mean(data_0(j:j + 8,:));
+          else
+              mean_0 = mean(data_0(j:end,:));
+          end
+         index = index + 1; 
+         for i=1:num_beads
+             mean_xy(1) = mean(data_0(step_ind:j-steps+1,(i-1)*2 + 1));
+             mean_xy(2) = mean(data_0(step_ind:j-steps+1,(i-1)*2 + 2));
+             std_xy(1) = std(data_0(step_ind:j-steps+1,(i-1)*2 + 1));
+             std_xy(2) = std(data_0(step_ind:j-steps+1,(i-1)*2 + 2));
+             std_av = mean(std_xy);
+             list = vertcat(list, [i, index, j-step_ind-steps, mean_xy(1), mean_xy(2), round(1000*std_av), k]);
+             hold on, plot(mean_xy(1), mean_xy(2), 'ko', 'MarkerSize', 12,'MarkerFaceColor','k'), ...
+                text(mean_xy(1), mean_xy(2) + 0.012, num2str(index),'FontSize',14);
+         end
+         hold off 
+         step_ind = j+steps;
+       end    
+    %end
+end
+%last step
+index = index + 1;    
+ for i=1:num_beads
+     mean_xy(1) = mean(data_0(step_ind:j-steps,(i-1)*2 + 1));
+     mean_xy(2) = mean(data_0(step_ind:j-steps,(i-1)*2 + 2));
+     std_xy(1) = std(data_0(step_ind:j-steps,(i-1)*2 + 1));
+     std_xy(2) = std(data_0(step_ind:j-steps,(i-1)*2 + 2));
+     std_av = mean(std_xy);
+     list = vertcat(list, [i, index, j-step_ind-steps, mean_xy(1), mean_xy(2), round(1000*std_av), k]);
+     hold on, plot(mean_xy(1), mean_xy(2), 'ko', 'MarkerSize', 8,'MarkerFaceColor','k'),...
+         text(mean_xy(1), mean_xy(2) + 0.02, num2str(index),'FontSize',10),
+ end
+ hold off 
+         
+for i=num_beads+1:size(list,1)
+    list(i,8) = round(1000*(sqrt((list(i,4)-list(i-num_beads,4))^2 + (list(i,5)-list(i-num_beads,5))^2))); 
+end
+list_new_0=[];
+for i=1:num_beads
+    list_new_0 = vertcat(list_new_0, list(i:num_beads:end,:));
+end
+

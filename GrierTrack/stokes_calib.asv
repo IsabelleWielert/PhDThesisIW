@@ -1,0 +1,53 @@
+function stokes_calib(velo, delta_x, num_beads)
+%STOKES_CALIB    Create plot of datasets and fits
+
+%   Creates a plot, similar to the plot in the main curve fitting
+%   window, using the data that you provide as input.  You can
+%   apply this function to the same data you used with cftool
+%   or with different data.  You may want to edit the function to
+%   customize the code and this help message.
+%
+%constants
+eta = 0.80E-3; %viskosity in units of kg/(ms);
+radius = 0.913E-6; %Radius of bead in units of m;
+
+% --- Create fit "linear fit"
+my_model = fittype('poly1');
+
+data_l= length(velo)
+for k=1:num_beads 
+
+    % Fit this model using new data
+    fit_st = fit(velo, delta_x(:,k), my_model);
+    
+    kappa = 1E3*6*pi*eta*radius/fit_st.p1;
+    delta_v = velo(data_l) - velo(1);
+    delta_y_max = (delta_x(data_l,k)+delta_x(1,k+num_beads)) - (delta_x(1,k)-delta_x(1,k+num_beads));
+    delta_y_min = (delta_x(data_l,k)-delta_x(1,k+num_beads)) - (delta_x(1,k)+delta_x(1,k+num_beads));
+    m_min = (delta_y_min/delta_v);
+    m_max = (delta_y_max/delta_v);
+    error_kappa_ub = 1E3*6*pi*eta*radius/m_min
+    error_kappa_lb = 1E3*6*pi*eta*radius/m_max
+    error:kappa = error_kappa_ub-error_kappa
+    b_min = (delta_x(1,k)+delta_x(1,k+num_beads)) - m_min*velo(1);
+    b_max = (delta_x(1,k)-delta_x(1,k+num_beads)) - m_max*velo(1);
+    
+    % --- Plot data originally in dataset "velocity vs. delta_y
+    figure(k), errorbar(velo, delta_x(:,k), delta_x(:,k+num_beads),...
+        '.r'),...
+         axis([min(velo)-1/2*min(velo) max(velo)+1/2*min(velo) ...
+         min(delta_x(:,k))-1/2*min(delta_x(:,k)) max(delta_x(:,k))+...
+         1/2*min(delta_x(:,k))]), ylabel('\Delta y [µm]','Fontsize', 10),...
+         xlabel('velocity [µm/s]','Fontsize', 10), title(['Bead ', int2str(k),...
+         ': Stokes calibration'], 'Fontsize', 12) ,grid on,...
+         text(max(velo)-40, 1/3*max(delta_x(:,k)), ['Stiffness: \newline \kappa = ',...
+             num2str(kappa, '%1.4fpN/nm')],'BackgroundColor', 'r', ...
+             'Fontsize', 12); 
+    hold on
+    
+ % Plot this fit
+    plot(velo, my_model(fit_st.p1,fit_st.p2, velo),'-r'), ...
+        legend('exp. data', 'fit', 'Location', 'NW');
+    hold on
+end
+end

@@ -1,0 +1,301 @@
+%*************************************************************************
+%This function "tracking" is a subroutine of a tracking_program designed
+%for holographic optical tweezers for calibration methods. It calculates 
+%the centers of a stated number of trapped beads with subpixel resolution 
+%of each stated number of image files (single BMPs or TIFs).  
+%
+%input:
+%      handles - handles contain several parameters of a graphical user
+%      interface written in another function. 
+%      num_input - Anzahl der Beads, die getrackt werden sollen
+%optional input:
+%      cutting_range - Anzahl der herausgeschnittenen frames, wenn ein fehlerhafter frame
+%                      auftaucht. Wenn also die durch num_input vorgegebenen
+%                      Beads nicht gefunden werden, so gehen im Bereich von
+%                      [frame - floor(cutting_range/2), frame + floor(cutting_range/2)]
+%                      nicht ins tracking ein; preset: cutting_range = 7 
+%      diameter      - Diameter of the Beads in Pixel, preset: diameter = 33
+%      binning       - Binning of the frames (1 - 4)
+%      magni_input   - magnification of the objective (50, 60, 100); preset magni = 60
+%
+% Zum Tracken werden Routinen der Griergroup verwendet (bpass, pkfind, cntrd, track).
+% bpass filtert das einzelne Bild; pkfind gibt die vorläufigen Koordinaten der
+% gefundenen Beads zurück; cntrd berechnet Zentrum der Beads mit subpixel
+% Genauigkeit. Daraufhin wird mit track ein Datenfeld tr erzeugt, dessen 
+% Inhalt folgende Bedeutung hat:
+% Spalte   Bedeutung
+%   1      x-Koordinate des jeweiligen Beads
+%   2      y-Koordinate des jeweiligen Beads
+%   3      frame des jeweiligen Beads
+%   4      Numer des Beads
+%
+%output:
+%       n tif-files: Für n getrackte Beads werden n Graphen gespeichert, die jeweils
+%                      frame gegen x- bzw. y-Werte darstellen ohne und mit
+%                      Driftkorrektur.
+%       txt-file: Enthält Koordinaten der Beads, Steigung des Drifts bzw. nach Drift- 
+%                 korrektur, Standardabweichung und Federkonstante für jeden 
+%                 Bead und für x-Koordinaten und y-Koordinaten
+%
+%       Ausgegebene Dateien werden in Ordner der multipage_tif-Datei
+%       gespeichert!!
+%******************************************************************************************
+function tracking(handles)
+
+
+frames = str2double(get(handles.frames_input,'String'));
+camera = get(handles.camera_input,'Value');
+diameter = str2double(get(handles.diameter_input,'String'));
+num_folders = str2double(get(handles.num_folders,'String'));
+binning = str2double(get(handles.binning,'String'));
+tif_format = get(handles.tif_format,'Value');
+
+
+if (diameter < 2) || (diameter > 100)
+    warndlg('Diameter of the GCs is out of range (5 - 35)');
+    return;
+elseif (diameter/2 == floor(diameter/2))
+    diameter = round(diameter/2)*2 + 1;    
+    warndlg('Diameter has to be an odd valued integer.\n The program adds one');
+end
+
+
+noise = .5;%noise is Parameter of bpass.m
+pass_limit = diameter + 2; %bpass limit for bpass.m routine    
+
+
+%open dialog for choosing the first tif-image in the desired folder
+[FileName,PathName] = uigetfile('*.tif; *.bmp');
+%if cancel is pushed, then return.
+if (isscalar(FileName) == 1) && (isscalar(PathName) == 1);
+    return;
+end  
+
+% Ending of the image file (e.g. .bmp, .tif);
+path_end = FileName(end-3:end);
+
+% pixel factor for absolute lengthscales
+switch camera
+    case 1 %pixel scaling in units of micron for 
+           %100x oil immersion objective (TIRF setup)
+        magni = binning*0.180;
+    case 2 %pixel scaling in units of micron for 
+           %100x oil immersion objective (Confocal setup)
+        magni = binning*0.065;
+    case 3  %pixel scaling in units of micron for 
+            %100x oil immersion objective (Zeiss OT setup)
+        magni = binning*0.099;
+end        
+
+
+%find paths of folders
+cd(PathName);
+cd('..')
+Main_Path = cd;
+Main_Path_dir = dir(Main_Path);
+folder_path = cell(num_folders,1);
+for z=1:num_folders
+   folder_path(z) = cellstr([Main_Path, '\', Main_Path_dir(z+2).name]);
+end
+
+    
+for f=1:num_folders
+    folder = [char(folder_path(f)),'\']; 
+    files = dir([folder, '*.tif']);
+    if (tif_format <= 2)
+        str = findstr(files(1).name, '_');
+        FileName = files(1).name(1:str(end)-1);
+    else
+        FileName = files(1).name(end-3:end);       
+    end
+    if (isdir([folder, 'results_', FileName])==0)
+        mkdir([folder, 'results_', FileName]);   
+    end
+    
+    tr = [];
+    pos_list = [];
+    pos = 1;
+    tic
+    %Analyze Frames
+    set(handles.data_output, 'String', 'Tracking runs!');
+    drawnow
+    for i=1:frames        
+      switch tif_format
+        case 1 %single 8-bit tif files (Camware software for PCO)
+            % string for new files
+            img = double(imread([folder,files(i).name]));            
+            imwrite(uint8(img), [folder, FileName, path_end], 'tif', ...
+                'WriteMode', 'append', 'Compression', 'none')
+            delete([folder,files(i).name]);
+        case 2 %single 16-bit tif files (NIS Elements at TIRF microscope)
+            img = double(imread([folder,files(i).name])); 
+            imwrite(uint16(img), [folder, FileName, path_end], 'tif', ...
+                'WriteMode', 'append', 'Compression', 'none')
+            delete([folder,files(i).name]);
+            %conversion to 8-bit
+            img = round(img./(2^8));
+        case 3 %multipaged 8-bit tif files (Camware software for PCO)
+            img = double(imread([folder,files(1).name],i)); 
+        case 4 %multipaged 16-bit tif files (Camware software for PCO)
+            img = double(imread([folder,files(1).name],i)); 
+            %conversion to 8-bit
+            img = round(img./(2^8));
+      end
+      
+      %invert the 8bit-image to get bright cells on dark background 
+      %img = 2^8 - img;
+
+      % bpass-Routine
+      %    input:
+      %    1.Arg.: image (->two-dim. array, 8bit)
+      %    2.Arg.: Länge in Pixeln über die Rauschen gemittelt werden soll
+      %    3.Arg.: Bandpass-Grenze in Pixeln (ungerader Wert); sollte größer als ein typisches Objekt sein 
+      %    output:
+      %    Gefiltertes Bild (-> 2-dim. array) 
+
+      %Filterung des Bildes
+      img_filter = bpass(img, noise, pass_limit);
+      %jetzt wird in max_bright höchste Intensität (zw. 0-255) des Bildes
+      %img_filter berechnet
+
+      max_bright = max(max(img_filter)); 
+      %und daraus berechnet sich der Schwellenwert 'thrh' für die Routine pkfnd
+
+      thrh =  0.6*max_bright;
+      % pkfnd-Routine:
+      %   inputs:
+      %   1.Arg.: Das (gefilterte) Bild in dem Helligkeitsspeaks gefunden werden sollen
+      %   2.Arg.: Der kleinste Helligkeitswert, der noch als lokales Maximum
+      %           druchgehen soll
+      %   3.Arg.(optional): Wenn die Daten des Bildes verrauscht sind, d.h. das
+      %                     pro Teilchen, das getrackt werden soll, mehrere
+      %                     lokale Maxima vorliegen, soll hellster Wert
+      %                     genommen werden. Wert sollte etwas größer als
+      %                     Teilchendurchmesser in Pixeln sein
+      %   output:
+      %   (Nx2)-array, dass in [:,1] die x-Werte der lokalen Maxima enthält und
+      %   in [:,2] die zugehörigen y-Werte
+
+      pk = pkfnd(img_filter, thrh, pass_limit);
+      %Die Routine cntrd berechnet das genaue Zentrum eines jeden gefundenen
+      %Beads der Routine pkfnd
+      %  cntrd-Routine
+      %    inputs:
+      %    1.Arg.: Das gefilterte Bild
+      %    2.Arg.: output der pkfnd-Routine
+      %    3.Arg.: Dieser Wert entspricht der Größe der zu verfolgenden Beads in Pixeln
+      %            plus 2 und gibt den Bereich an über den bei der Kalkulation des
+      %            Zentrums eines jeden Beads gemittelt werden soll.
+      %    output:
+      %    (Nx4)-Array, dass für n getrackte Beads x-, y-, Helligkeitswerte und
+      %    Radius gespeichert hat
+      cnt = cntrd(img_filter, pk, pass_limit);
+      num_beads = size(cnt,1); %number of tracked Beads    
+
+
+
+      %graphical output for first frame in order to determine deficient
+      %filtering or tracking
+      if (i == 1 && f == 1);
+       
+        figure(1)
+        colormap('gray'), imagesc(img);
+        hold on
+        plot(cnt(:,1), cnt(:,2), '+r');
+        hold off
+        %question dialog for stopping tracking or not.
+        button = questdlg('Stop image processing to change tracking parameters?', ...
+            'Deficient Tracking?', 'Yes', 'No', 'Yes');
+        if (strcmp(button, 'Yes') == 1)
+            close(1)
+            return;
+        end
+        close(1)
+      end
+      
+      if(mod(i,10)==0);
+        time = toc/60;
+        set(handles.data_output, 'String',['Folder: ', int2str(f), ...
+            '; Frames to go: ', int2str(frames-i), '; Threshold: ', ...
+            num2str(thrh, '%3.2f'), '; Remaining Time: ', ...
+            num2str(time/10*(frames-i), '%3.2f min')]);
+        drawnow
+        tic
+      end
+      
+      %the next for loop is saving the tracked coordinates to the position list
+      for j=1:num_beads 
+         pos_list(pos,1:3) = [cnt(j,1:2), i];
+         pos = pos + 1;
+      end   
+    end
+
+    
+    %   track-Routine
+    %    input:
+    %    1.Arg.: pos_list (1. column: x-values, 2.column: y-values, 3. column:
+    %    frame)
+    %    2.Arg.: estimate of longest step-length between two frames. 
+    %    output:
+    %    (frames*Nx4)-array:
+    %           1. columna: x-values
+    %           2. Spalte: y-values
+    %           3. Spalte: frame
+    %           4. Spalte: ID-number
+
+    param.mem = 20;%this is the number of time steps that a particle can be
+                   %'lost' and then recovered again.
+    param.dim = 2; %dimension of the positionlist, here 2 for x- and y-values
+    param.good = 60;%set this keyword to eliminate all trajectories with
+    %              fewer than param.good valid positions.  This is useful
+    %              for eliminating very short, mostly 'lost' trajectories
+    %              due to blinking 'noise' particles in the data stream.
+    param.quiet = 0;%set to 1 if you want to eliminate any text
+
+    tr = track(pos_list, 2*diameter, handles, param);
+
+    tr_max = max(tr(:,4));
+    
+%     multi_tif_path = [FileName(1:end-4), '_plus_tracks', path_end];
+%     for i=1:frames
+%         
+%         img = double(imread(file_path,i)); 
+%        
+%         figure(1);
+%         colormap('gray'), 
+%         imagesc(img),
+%         hold on
+% 
+%         for j=1:tr_max
+%             ind_tr = [];
+%             ind_tr = find(tr(:,4)==j);
+%             if (isempty(find(tr(ind_tr,3)==i))==0)
+%                 plot(tr(ind_tr,1),tr(ind_tr,2), '-k'),
+%                 text(10,30,int2str(i),'FontSize', 16);
+%             end
+%             hold on
+%             axis equal;
+%         end
+%         hold off
+%         frame = getframe(gca);
+%         [img,Map] = frame2im(frame);
+%         img = rgb2gray(img);
+%         %generation of a 8-bit multi-image tiff-file with tracks
+%         imwrite(uint8(img), multi_tif_path, 'tif', ...
+%                 'WriteMode', 'append', 'Compression', 'none')
+%     end
+    tr(:,1:2) = magni*tr(:,1:2);
+    
+    tbl_file = [folder, 'results_', FileName,'\track_', FileName, '.mat'];
+    save(tbl_file, 'tr', '-mat');
+    
+    %speed_distr([folder, FileName, path_end], tr, frames, 10, 2, magni);    
+    
+end
+
+end
+ 
+
+
+
+

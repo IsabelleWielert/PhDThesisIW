@@ -1,0 +1,21 @@
+function multi2single(frames, folder)
+
+%Öffnet Dialogfenster zur Eingabe der gewünschten multipage_tif-Datei
+[FileName,PathName] = uigetfile('*.tif');   
+%Falls auf Abbrechen gedrückt wird, soll Funktion tracking verlassen werden
+if (FileName == 0) & (PathName == 0); 
+    return;
+end  
+file_path = [PathName, FileName];
+FileName = strrep(FileName, '.tif', '');
+
+if (isdir([PathName, folder])==0)
+    mkdir([PathName, folder]);
+end  
+[PathName, folder, '\', FileName,'_', num2str(3, '%05.0f'),'.tif']
+for i=1:frames
+  img = double(imread(file_path,i));
+  image(img);
+  %saveas(img, [PathName, folder, '\', FileName,'_', num2str(i, '%05.0f'),'.tif'], 'tif');
+end
+end

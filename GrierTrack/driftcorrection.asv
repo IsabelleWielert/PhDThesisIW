@@ -1,0 +1,66 @@
+function [slope, slope_corr, data_corr, mean_xy] = driftcorrection(path, i, frame, data)
+  h = figure('Visible', 'off');
+  for j=1:2
+  
+  %Driftkorrektur über lineare Regression der Werte
+  [lin_fit, errors] = polyfit(frame, data(j,:), 1);
+  %corr_xy enthält die Werte aus data nach Driftkorrektur
+  corr_xy(j,:) = data(j,:) - lin_fit(1)*frame;
+    %Zur Überprüfung der Driftkorrektur wird Steigung der lin. Regression
+  %von corr bestimmt und später in txt-File ausgegeben
+  [lin_fit_corr, errors2] = polyfit(frame, corr_xy(j,:), 1);
+ 
+  %Es wird für jeden getrackten Bead ein Fenster geöffnet, dass jeweils
+      %vier Graphiken enthält: x-Werte gegen frames ohne und mit Driftkorrektur 
+      %und y-Werte ohne und mit Driftkorrektur 
+      
+      if (j == 1)
+         subplot(2,2,1), plot(frame, data(j,:),'+r'), xlabel('frames'), ylabel('x-values [µm]'), ...
+         title(['Bead ',int2str(i),': x-values before driftcorrection']), ...
+         axis([min(frame) max(frame) min(data(j,:)) max(data(j,:))]), grid on, grid minor;
+         hold on
+         plot(frame, lin_fit(2) + lin_fit(1)*frame, '-k')    
+         hold off
+         subplot(2,2,2), plot(frame, corr_xy(j,:), '*r'),xlabel('frames'), ylabel('x-values [µm]'), ...
+         title(['Bead ',int2str(i),': x-values after driftcorrection']), ...
+         axis([min(frame) max(frame) min(corr_xy(j,:)) max(corr_xy(j,:))]), grid on, grid minor;
+         hold on
+         plot(frame, lin_fit_corr(2) + lin_fit_corr(1)*frame, '-k')
+         hold off
+      end
+      if (j == 2)
+         subplot(2,2,3), plot(frame, data(j,:), '+r'), xlabel('frames'), ylabel('y-values [µm]'), ...
+         title(['Bead ',int2str(i),': y-values before driftcorrection']), ...
+         axis([min(frame) max(frame) min(data(j,:)) max(data(j,:))]), grid on, grid minor;
+         hold on
+         plot(frame, lin_fit(2) + lin_fit(1)*frame, '-k')
+         hold off
+         subplot(2,2,4), plot(frame, corr_xy(j,:), '*r'), xlabel('frames'), ylabel('y-values [µm]'), ...
+         title(['Bead ',int2str(i),': y-values after driftcorrection']),...
+         axis([min(frame) max(frame) min(corr_xy(j,:)) max(corr_xy(j,:))]), grid on, grid minor;
+         hold on
+         plot(frame, lin_fit_corr(2) + lin_fit_corr(1)*frame, '-k')
+         hold off
+      end
+  slope(j)=lin_fit(1);
+  slope_corr(j)=lin_fit_corr(1);
+  mean_xy(j) = mean(corr_xy(j,:));
+  data_corr(:,j) = corr_xy(j,:)' - mean_xy(j);
+  
+  end 
+  saveas(h, path, 'fig')
+  close(h);
+  
+  %projection on filament vectors
+  
+  f(1) = [];
+  f(2) = [];
+  
+  
+%    
+%    hd = filter_bandstop_40_60_Hz;
+%    data1 = filter(hd,data_corr(:,1)');    
+%    data2 = filter(hd,data_corr(:,2)');    
+%    data_corr = [data1', data2'];
+   
+end

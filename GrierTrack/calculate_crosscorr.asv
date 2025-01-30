@@ -1,0 +1,121 @@
+function calculate_crosscorr(path, data, mean_xy, frames, kappa_ps, f_s)
+ 
+k_B = 1.3806505E-23; %Boltzmann constant
+T = 293.15; %temperature in the lab in units of Kelvin
+R = 0.913; %Radius of the bead in micron
+eta = 1; %Viscosity in units of 1mPa
+gamma = 6*pi*eta*R*1E-6; %gamma is the friction coefficient in units of g/s
+
+%Erzeugung und Öffnen des txt-Files 
+%fid = fopen(path,'w'); 
+dt = 1/f_s*1000;
+block = frames;
+f_num = floor(frames/block);      
+
+nLags = 250;
+
+t = 1/1000*(0:dt:nLags*dt);
+
+
+
+combi = [1,2;;1,3;2,3];%;2,3;2,4;3,4];
+data_old = data;
+
+ for m=1:size(combi,1);
+         
+    h = figure('Visible', 'on');
+    ax1 = gca;
+    set(ax1, 'XColor','k','YColor','k') 
+
+    ax2 = axes('Position',get(ax1,'Position'),...
+               'XAxisLocation','bottom',...
+               'YAxisLocation','right',...
+               'Color','none',...
+               'XColor','k','YColor','r');
+    
+    
+    %vec_s = mean_xy(combi(m,1),1:2) - mean_xy(combi(m,2),1:2);
+    %S = norm(vec_s) %seperation of Beads in micron
+    %vec_s = vec_s/S;
+
+    %normal_vec_s = [vec_s(2), -vec_s(1)];
+
+    for k=1:2;  
+       data(:,1,combi(m,k)) = data_old(:,1:2,combi(m,k))*vec_s';
+       data(:,2,combi(m,k)) = data_old(:,1:2,combi(m,k))*normal_vec_s';
+    end    
+    
+    std_com(:,1) = 1E3*std([data(:,1,combi(m,1)) data(:,1,combi(m,2))]);
+    std_com(:,2) = 1E3*std([data(:,2,combi(m,1)) data(:,2,combi(m,2))]);
+    kappa_ps = (1E24)*k_B*T./std_com.^2;
+    eps_x = 3*R/(2*S);  
+    eps_y = 3*R/(4*S);           
+    
+    kappa_p = kappa_ps(1,1); %kappa_ps contains stiffnesses of the trap
+    kappa_s = kappa_ps(2,1);
+    tau_x = (1E3)*gamma./kappa_p; %relaxation time
+    tau_y = (1E3)*gamma./kappa_s;
+    
+    auto_p_theo = (1E24)*k_B*T/(2*kappa_p)*(exp(-t*(1+eps_x)/tau_x) + exp(-t*(1-eps_x)/tau_x));
+    auto_s_theo = (1E24)*k_B*T/(2*kappa_s)*(exp(-t*(1+eps_y)/tau_y) + exp(-t*(1-eps_y)/tau_y));
+    kappa_p = (kappa_ps(1,1) + kappa_ps(2,1))/2; %kappa_ps contains stiffnesses of the trap
+    kappa_s = (kappa_ps(1,2) + kappa_ps(2,2))/2;
+    tau_x = (1E3)*gamma./kappa_p; %relaxation time
+    tau_y = (1E3)*gamma./kappa_s;
+    cross_p_theo = (1E24)*k_B*T/(2*kappa_p)*(exp(-t*(1+eps_x)/tau_x) - exp(-t*(1-eps_x)/tau_x));
+    cross_s_theo = (1E24)*k_B*T/(2*kappa_s)*(exp(-t*(1+eps_y)/tau_y) - exp(-t*(1-eps_y)/tau_y));
+
+   path_new = [path, 'combi_', int2str(combi(m,1)), int2str(combi(m,2)), '.mat'];      
+   path_graph = [path, 'Graph_combi', int2str(combi(m,1)), int2str(combi(m,2)), '.tif'];
+   for j=1:2;
+%        F_av = zeros(block, 2);
+%        for k=1:f_num
+%         F =  fft([data((k-1)*block+1:k*block,j,combi(m,1)) data((k-1)*block+1:k*block,j,combi(m,2))]);          
+%         F_av = F_av + F;
+%        end    
+%         
+%         F_av = F_av./f_num;
+%         
+%         ACF1  =  ifft(F_av(:,1).* conj(F_av(:,1)));
+%         ACF2  =  ifft(F_av(:,2).* conj(F_av(:,2)));
+%         
+%         XCF    =  ifft(F_av(:,1).* conj(F_av(:,2)));
+%         XCF    =  XCF(block:-1:(block-nLags));
+%         XCF_xy(:,j)    =  real(XCF) / (sqrt(ACF1(1)) * sqrt(ACF2(1))) * std_com(1,j) * std_com(2,j);
+        
+        XCF    = crosscorr(data(:,j,combi(m,1)),data(:,j,combi(m,2)),nLags) * std_com(1,j) * std_com(2,j);
+        XCF_xy(:,j) = XCF([nLags+1:1:2*nLags+1]);
+        if j==1
+            ACF1_x = autocorr(data(:,j,combi(m,1)), nLags)*std_com(1,1)^2;
+            ACF2_x = autocorr(data(:,j,combi(m,2)), nLags)*std_com(2,1)^2;
+        end
+   end
+%    fprintf(fid, 'corr(B%1.0f, B%1.0f)    %1.4f      %1.4f\n', combi(i,1),...
+%           combi(i,2), r(1), r(2)); max(ACF1_x(1:nLags), ACF2_x(1:nLags))
+  plot((0:1:nLags)*dt, ACF1_x(1:nLags+1), '+k', (0:1:nLags)*dt, ...
+     ACF2_x(1:nLags+1), '*k', 'Parent', ax1), grid on,...%(0:1:nLags)*dt, ...
+%      auto_p_theo(1:nLags+1), '-k', 'Parent', ax1), grid on,...
+     title(ax1, ['ACF and XCF for Bead ', int2str(combi(m,1)), ' and Bead ', ...
+     int2str(combi(m,2)), ' (spacing: ',num2str(S, '%2.2f'),'µm)']), xlabel(ax1, 'time delay [ms]'), ...
+     ylabel(ax1, 'Autocorrelation [nm^2]'), axis(ax1, [0 nLags*dt ...
+     -max(ACF1_x(1:nLags+1)) max(ACF1_x(1:nLags+1))]), legend(ax1, ['ACF for Bead ', int2str(combi(m,1))], ...
+       ['ACF for Bead ', int2str(combi(m,2))],'Location', 'NorthEast');
+   hold on
+   plot((0:1:nLags)*dt, ...
+       XCF_xy(1:nLags+1,1), '+r', (0:1:nLags)*dt, ...
+       XCF_xy(1:nLags+1,2), '*r', 'Parent', ax2),...%(0:1:nLags)*dt,...
+%        cross_p_theo(1:nLags+1), '-r', (0:1:nLags)*dt, ...
+%        cross_s_theo(1:nLags+1), '-r', 'Parent', ax2),... 
+       legend(ax2, 'XCF for ||-displacements', 'XCF for -|-displacements',...
+       'Location', 'SouthEast'),...
+     ylabel(ax2, 'Crosscorrelation [nm^2]'), %axis(ax2, [0 nLags*dt min(min(XCF_xy(1:nLags,1), ...
+       %XCF_xy(1:nLags,2))) abs(min(min(XCF_xy(1:nLags,1),XCF_xy(1:nLags,2))))]);
+   hold off
+   ccorr_save=[(1:1:nLags)', XCF_xy(1:nLags,1:2)];
+   saveas(h, path_graph, 'tif');
+   %close(h);
+   save(path_new, 'ccorr_save', '-mat');
+ %fclose(fid);
+ end
+
+end

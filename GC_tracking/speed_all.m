@@ -1,0 +1,86 @@
+function speed_all(gaussian)
+
+%open dialog for choosing a file name
+PathName = uigetdir;
+%if 'cancel' will be pushed, execution is stopped.
+if (PathName == 0);
+    return;
+end  
+
+cd(PathName)
+files = dir('*Data_Speed_all_versus_time.mat'); %Data_Speed_all_versus_time
+num_dc = size(files,1);
+speed = [];
+speed_all = [];
+
+for i=1:num_dc
+    FileName = files(i).name;
+    load(FileName, 'data_all', '-mat');
+    speed = data_all(:,2);
+    speed_all = vertcat(speed_all, speed);
+end
+
+path = cd;
+path_speed = [path, '\Data_Speed_all_versus_time.mat'];
+save(path_speed, 'data_all', '-mat');   
+    
+datapoints = size(speed_all,1);
+
+figure(1),
+    
+[n,xout] = hist(speed_all', 0:1/20:5);
+
+%subplot(2,1,1),
+bar(xout,n, .8, 'r'), 
+%fitting a gaussian to speed histogram
+if (gaussian == 1)
+    f = fittype('gauss1');
+elseif (gaussian == 2)
+    f = fittype('gauss2');
+end
+res_fit  = fit(xout(2:end)',n(2:end)',f);
+confi_speed = confint(res_fit);
+if (gaussian == 1)
+     err_speed = confi_speed(2,2) - confi_speed(1,2);
+elseif (gaussian == 2)
+     err_speed_1 = confi_speed(2,2) - confi_speed(1,2);
+     err_speed_2 = confi_speed(2,5) - confi_speed(1,5);
+end
+title('Speed: Histogram (\Delta t = 1s)' , 'FontSize', 14),
+hold on
+plot(res_fit, '-k'),
+hold off
+xlabel('Speed [µm/s]', 'FontSize', 12), ...
+ylabel('Frequency', 'FontSize', 12),
+xlim([0 3]);
+grid on;
+if (gaussian == 1)
+    text(1.8,max(n)-150,...
+    ['Single Gaussian Fit: \newline\Rightarrow v=(',...
+        num2str(res_fit.b1,'%1.3f'),'\pm', num2str(err_speed, ...
+        '%1.3f)µm/s'),...
+        '\newline Mean velocity =', num2str(mean(speed_all), '%1.3fµm/s'), ... 
+        '\newline# of datapoints: ',num2str(sum(datapoints),'%3.0f')], 'FontSize',12),
+elseif (gaussian == 2)
+text(2.5,max(n)-50,...
+['Double Gaussian Fit\newline\Rightarrow v_1=(',...
+    num2str(res_fit.b1,'%1.3f'),'\pm', num2str(err_speed_1, ...
+    '%1.3f)µm/s'),'\newline\Rightarrow v_2=(',...
+    num2str(res_fit.b2,'%1.3f'),'\pm', num2str(err_speed_2, ...
+    '%1.3f)µm/s'),'\newline# of datapoints: ', ...
+    num2str(sum(datapoints),'%3.0f')], 'FontSize',12),
+end
+% subplot(2,1,2),
+% plot(data_all(:,1), data_all(:,2), '+r');
+% title('Speed versus Time', 'FontSize', 14),
+% xlabel('Time [s]', 'FontSize', 12), ...
+% ylabel('Speed [µm/s]', 'FontSize', 12),
+% xlim([0 300]);
+% ylim([0 3]);
+% grid on;
+
+path_plot_f = [PathName, '\Speed_all_versus_time.fig'];
+path_plot_t = [PathName, '\Speed_all_versus_time.tif'];
+saveas(1, path_plot_f, 'fig');
+saveas(1, path_plot_t, 'tif');
+end

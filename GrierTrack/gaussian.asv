@@ -1,0 +1,10 @@
+function [y] = gaussian(param, x)
+    k_b = 1.3806505E-23; %Boltzmann constant
+    T = 298.15; %temperature in the lab in units of Kelvin
+    sigma = param(1);
+    mu = param(2);
+    %mu = param(3);
+    
+    %y = N*exp(-1/2*(1E-18)*kappa*(x-mu).^2./(k_b*T));
+    y = 1/(sqrt(2)*sigma)*exp(-1/2*(x-mu).^2/sigma.^2);
+end

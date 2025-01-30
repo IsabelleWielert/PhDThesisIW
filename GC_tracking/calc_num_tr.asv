@@ -1,0 +1,16 @@
+function [num_tr, num_ds] = calc_num_tr(data)
+
+ds_max = data(end,1);
+num_tr = 0;
+for i=1:ds_max
+    ds_id = data(:,1)==i;
+    tr = data(ds_id, 2);
+    tr_max = tr(end);
+    for j=1:tr_max 
+        tr_id = find(tr == j);
+        if ~isempty(tr_id)
+            num_ds = num
+            num_tr = num_tr +1;
+        end
+    end
+end

@@ -1,0 +1,109 @@
+function  calc_stokes_shifts(PathName, FileName, i, frame, data, velocity, thres_factor, radius)
+  
+     
+  h = figure('Visible', 'on');
+
+  path = [PathName, '\results\shift_stokes_Bead', int2str(i), '_', FileName, '.tif'];
+  
+  
+  %contants
+  eta = 1E-3; %viskosity of water in units of g/(ms)
+  error_eta = 0.1*eta;
+  radius = radius*1E-6; %beadradius in units of µm
+  error_radius = 0.023*1E-6;
+  error_velo = 0.01;% error of the velocity in units of µm/s
+  
+  %driftcorrection acomblished with linear regression
+  [lin_fit, errors] = polyfit(frame, data, 1);
+  %data_corr contains corrected values after driftcorrection
+  data_corr = data - lin_fit(1)*frame;
+  
+  frames = length(frame);
+  index_pos = 1;
+  index_neg = 1;
+  steps = 3;
+  zero_line = mean(data_corr(frames-200:frames));
+  width = max(data_corr(frames-200:frames)) - min(data_corr(frames-200:frames));
+  threshold_pos = max(data_corr) - thres_factor*width;
+  threshold_neg = min(data_corr) + thres_factor*width;
+  data_shift_pos = 0;
+  data_shift_neg = 0;
+
+  for j=1:frames/steps;
+     data_curr = data_corr((j-1)*steps+1:j*steps);
+     mean_block = mean(data_curr);
+     if(mean_block > threshold_pos)
+         data_shift_pos(index_pos:(index_pos-1)+steps) = data_curr;
+         frame_pos(index_pos:(index_pos-1)+steps) = (j-1)*steps+1:j*steps;  
+         index_pos = index_pos + steps;    
+     end
+     if(mean_block < threshold_neg)
+         data_shift_neg(index_neg:(index_neg-1)+steps) = data_curr;
+         frame_neg(index_neg:(index_neg-1)+steps) = (j-1)*steps+1:j*steps;  
+         index_neg = index_neg + steps;
+     end    
+  end    
+  if (length(data_shift_pos)~=1)
+      delta_y_plot_pos(1:max(frame_pos)-min(frame_pos)+201) = mean(data_shift_pos);
+      delta_y_pos = mean(data_shift_pos) - zero_line;
+      error_shift_pos = 0.004 + sqrt(var(data_shift_pos)/length(data_shift_pos));
+      
+  end    
+  if (length(data_shift_neg)~=1)
+     delta_y_plot_neg(1:max(frame_neg)-min(frame_neg)+201) = mean(data_shift_neg);
+     delta_y_neg = abs(mean(data_shift_neg) - zero_line);
+     error_shift_neg = 0.004 + sqrt(var(data_shift_neg)/length(data_shift_neg));
+  end
+  length(frame_neg)+length(frame_pos)
+  
+  if (length(data_shift_neg)~=1 & length(data_shift_pos)~=1)
+     delta_y= (delta_y_pos + delta_y_neg)/2; 
+     error_shift = (error_shift_pos + error_shift_neg)/2/sqrt(2);  
+     kappa = 6*pi*radius*eta*velocity/delta_y*1E3;
+     error_kappa = sqrt((kappa/eta)^2*(error_eta)^2 + (kappa/radius)^2*...
+        (error_radius)^2 + (kappa/velocity)^2*(error_velo)^2 +...
+        (kappa/(delta_y)^2)^2*(error_shift)^2);
+  end  
+  
+%   track_accuracy(frame, data_corr)    
+  plot(frame, data_corr, '+k', frame_pos, data_shift_pos, '*r', ...
+      frame_neg, data_shift_neg, '*r'),...
+      xlabel('frames'), ylabel('y-values [µm]'), ...
+  title(['Bead ',int2str(i),': y-values for Stokes calibration']), ...
+  axis([min(frame) max(frame) -3/2*max(data_corr) 3/2*max(data_corr)]), grid on, grid minor;
+  hold on
+  if(length(data_shift_pos)~=1)
+       plot(min(frame_pos)-100:max(frame_pos)+100, delta_y_plot_pos, '-r', ...
+      'LineWidth',2)
+      hold on
+      plot(frame_pos, data_shift_pos, '+r')
+  end
+  if (length(data_shift_neg)~=1)
+       plot(min(frame_neg)-100:max(frame_neg)+100, delta_y_plot_neg, '-r', ...
+      'LineWidth',2)
+      hold on
+      plot(frame_neg, data_shift_neg, '+r'), ...
+  end
+  if (length(data_shift_neg)~=1 & length(data_shift_pos)~=1)  
+         text(max(frame)-930, max(data_corr), ['velocity = ', ...
+         num2str(velocity, '%3.0fµm/s'), '.\newline shift (pos): ',...
+         num2str(delta_y_pos, '(%1.3f'), '\pm', num2str(error_shift_pos, ...
+         '%1.3f)µm'), '.\newline shift (neg): ',...
+         num2str(delta_y_neg, '(%1.3f'), '\pm', num2str(error_shift_neg, ...
+         '%1.3f)µm'), '.\newline shift (average): ',...
+         num2str(delta_y, '(%1.3f'), '\pm', num2str(error_shift, ...
+         '%1.3f)µm'), '.\newline est. \kappa: ',...
+         num2str(kappa, '(%1.4f'), '\pm', num2str(error_kappa, ...
+         '%1.4f)pN/nm')],  'BackgroundColor',[1 1 1], 'FontSize',10);
+  end  
+  hold off
+  saveas(h, path, 'tif')
+  %close(h);   
+  assignin('base',['data_corr_B', int2str(i)], data_corr)
+  assignin('base',['frame', frame)
+  assignin('base',['data_corr_', int2str(i)], frame_po)
+  assignin('base',['data_corr_', int2str(i)], data_corr)
+  assignin('base',['data_corr_', int2str(i)], data_corr)
+  assignin('base',['data_corr_', int2str(i)], data_corr)
+  assignin('base',['data_corr_', int2str(i)], data_corr)
+end

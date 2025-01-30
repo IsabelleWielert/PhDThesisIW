@@ -1,0 +1,111 @@
+function reanalyze_speed
+
+%parameters
+t_start = [2*60+12,7*60+23,12*60+31,18*60+22,20*60+30,25*60+37,33*60+52,...
+    37*60+10,41*60+33,47*60+58,51*60+51,57*60+7,83*60+35,108*60+31,...
+    111*60+19,113*60, 115*60]; %in units if seconds
+fps = 10;
+dist = 10;
+
+%open dialog for choosing tr_all.txt
+[FileName,PathName] = uigetfile('*.txt');
+%if cancel is pushed, then return.
+if (isscalar(FileName) == 1) && (isscalar(PathName) == 1);
+    return;
+end  
+cd(PathName)
+tr_all = load([PathName, FileName]);
+num_ds = tr_all(end,1); 
+
+speed_all = zeros(1000000, 4);
+tr_new = zeros(1000000, 5);
+for i=1:num_ds
+    ind_ds = tr_all(:,1)==i;
+    tr = tr_all(ind_ds,2:5);
+    tr_id = tr(:,4);
+    last_tr = tr(end,4);
+    h = waitbar(0,['Folder: ', int2str(i),'. Calculate Speed for each track ...']);
+    for j=1:last_tr
+        id = find(tr_id==j);
+        if ~isempty(id)
+            fr_id = tr(id,3);
+            pos = tr(id,1:2);
+            
+            %fill pos data of dead frames via linear interpolation
+            pos = fill_dead_frames(fr_id, pos);
+            
+            %reset fr_id to single frame steps
+            fr_id = fr_id(1):fr_id(end);
+            time = 1/fps*(fr_id-1); %units of seconds
+            
+            %calc speed via pos data
+            speed = calc_speed(pos, time, dist);
+            
+            %write data into tr_new array
+            dp = length(fr_id);
+            null_id = find(tr_new(:,1)==0,1);
+            ind = null_id:(null_id + dp - 1);
+            tr_new(ind, 1) = i;
+            tr_new(ind, 2) = j;
+            tr_new(ind, 3) = time/60 + t_start(i)/60;
+            tr_new(ind, 4:5) = pos;
+            %write data into speed array
+            dp = length(fr_id) - dist;
+            time(dp+1:end)=[];
+            null_id = find(speed_all(:,1)==0,1);
+            ind = null_id:(null_id + length(speed) - 1);
+            speed_all(ind, 1) = i;
+            speed_all(ind, 2) = j;
+            speed_all(ind, 3) = time/60 + t_start(i)/60;
+            speed_all(ind, 4) = speed;
+            waitbar(j/last_tr);
+        end
+    end
+    close(h)
+end
+speed_all(find(speed_all(:,1)==0,1):end,:)=[];
+tr_new(find(tr_new(:,1)==0,1):end,:)=[];
+assignin('base', 'speed_all', speed_all)  
+assignin('base', 'tr_new', tr_new)  
+[FileName,PathName] = uiputfile('*.txt');
+drawnow
+path_data = [PathName, FileName]; 
+save(path_data , 'speed_all', '-ascii', '-double' ,'-tabs'); 
+path_data = [PathName, FileName(1:end-13), 'tr_new.txt']; 
+save(path_data , 'tr_new', '-ascii', '-double' ,'-tabs'); 
+
+
+function pos = fill_dead_frames(fr_id, pos)
+
+dp = length(fr_id);
+pos_old = pos;
+num_filled = 0;
+for i=2:dp
+    fr_diff = fr_id(i)-fr_id(i-1);
+    if fr_diff>1
+        pos_diff = pos_old(i,:) - pos_old(i-1,:);
+        pos_filled = zeros(fr_diff-1,2);
+        for j=1:fr_diff-1
+            pos_filled(j,:) = pos_old(i-1,:)+j/fr_diff.*pos_diff;         
+        end
+        ind_fill = num_filled+i-1;
+        pos_tmp1 = pos(1:ind_fill,:);
+        pos_tmp2 = pos(ind_fill+1:end,:);
+        pos = vertcat(pos_tmp1, pos_filled, pos_tmp2);
+        num_filled = num_filled + fr_diff-1;
+    end
+end
+
+function speed = calc_speed(pos, time, dist)
+
+tr_len = length(time);
+dp = tr_len - dist;
+speed = zeros(dp,1);
+for j=1:dp;
+    ind = j + dist;
+    if (ind <= tr_len)
+        s_vec = [pos(ind,1)-pos(j,1);pos(ind,2)-pos(j,2)];
+        delta_t = time(ind)-time(j);   
+        speed(j) = norm(s_vec)/delta_t;
+    end
+end

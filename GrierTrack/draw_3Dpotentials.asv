@@ -1,0 +1,25 @@
+function draw_3Dpotentials(num_input, diam_px, magni, angle_steps, angle_step, mean_xy, stiffness_angle)
+for i=1:num_input;
+    t = 0:diam_px*magni/200:2*diam_px*magni;
+    for j=1:angle_steps;
+           plot3(t*cosd(angle_step*(j-0.5)) + mean_xy(i,1), ...
+                t*sind(angle_step*(j-0.5)) + mean_xy(i,2), (1.0E6)*stiffness_angle(j,i)*t.^2, '-k', 'LineWidth', 2), ...
+                zlim([0. 3.]), xlabel('distance in x-direction [µm]'), ylabel('distance in y-direction [µm]'), ...
+                zlabel('Pot. Energy [pN*µm]'), title('Potential energy of the optical tweezer'), ...
+                grid on, grid minor;
+          hold on
+    end
+    for k=1:10
+        z(1:angle_steps + 1) = 5/10*k; 
+      for j=1:angle_steps;
+        x_plot_data(j) = sqrt(z(1)/((1.0E6)*stiffness_angle(j,i)+eps))*cosd(angle_step*(j-0.5)) + mean_xy(i,1);
+        y_plot_data(j) = sqrt(z(1)/((1.0E6)*stiffness_angle(j,i)+eps))*sind(angle_step*(j-0.5)) + mean_xy(i,2);
+      end  
+      x_plot_data(angle_steps + 1) = sqrt(z(1)/((1.0E6)*stiffness_angle(1,i)+eps))*cosd(angle_step*0.5) + mean_xy(i,1);
+      y_plot_data(angle_steps + 1) = sqrt(z(1)/((1.0E6)*stiffness_angle(1,i)+eps))*sind(angle_step*0.5) + mean_xy(i,2);
+      plot3(x_plot_data, y_plot_data, z, '-r', 'LineWidth', 2);
+      hold on
+    end  
+end
+hold off
+end

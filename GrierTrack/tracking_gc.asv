@@ -1,0 +1,526 @@
+%*************************************************************************
+%This function "tracking" is a subroutine of a tracking_program designed
+%for holographic optical tweezers for calibration methods. It calculates 
+%the centers of a stated number of trapped beads with subpixel resolution 
+%of each stated number of image files (single BMPs or TIFs).  
+%
+%input:
+%      handles - handles contain several parameters of a graphical user
+%      interface written in another function. 
+%      num_input - Anzahl der Beads, die getrackt werden sollen
+%optional input:
+%      cutting_range - Anzahl der herausgeschnittenen frames, wenn ein fehlerhafter frame
+%                      auftaucht. Wenn also die durch num_input vorgegebenen
+%                      Beads nicht gefunden werden, so gehen im Bereich von
+%                      [frame - floor(cutting_range/2), frame + floor(cutting_range/2)]
+%                      nicht ins tracking ein; preset: cutting_range = 7 
+%      diameter      - Diameter of the Beads in Pixel, preset: diameter = 33
+%      binning       - Binning of the frames (1 - 4)
+%      magni_input   - magnification of the objective (50, 60, 100); preset magni = 60
+%
+% Zum Tracken werden Routinen der Griergroup verwendet (bpass, pkfind, cntrd, track).
+% bpass filtert das einzelne Bild; pkfind gibt die vorläufigen Koordinaten der
+% gefundenen Beads zurück; cntrd berechnet Zentrum der Beads mit subpixel
+% Genauigkeit. Daraufhin wird mit track ein Datenfeld tr erzeugt, dessen 
+% Inhalt folgende Bedeutung hat:
+% Spalte   Bedeutung
+%   1      x-Koordinate des jeweiligen Beads
+%   2      y-Koordinate des jeweiligen Beads
+%   3      frame des jeweiligen Beads
+%   4      Numer des Beads
+%
+%output:
+%       n tif-files: Für n getrackte Beads werden n Graphen gespeichert, die jeweils
+%                      frame gegen x- bzw. y-Werte darstellen ohne und mit
+%                      Driftkorrektur.
+%       txt-file: Enthält Koordinaten der Beads, Steigung des Drifts bzw. nach Drift- 
+%                 korrektur, Standardabweichung und Federkonstante für jeden 
+%                 Bead und für x-Koordinaten und y-Koordinaten
+%
+%       Ausgegebene Dateien werden in Ordner der multipage_tif-Datei
+%       gespeichert!!
+%******************************************************************************************
+function [FileName, PathName] = tracking_gc(handles, cutting_range)
+
+
+global pos_list_all
+
+frames_input = str2double(get(handles.frames_input,'String'));
+binning = str2double(get(handles.binning_input,'String'));
+if (binning <= 0) | (binning > 4)
+    errordlg('Binning is out of range (1 - 4)!!');
+    return;    
+end 
+camera = get(handles.camera_input,'Value');
+num_input = str2double(get(handles.num_input,'String'));
+diameter = str2double(get(handles.diameter_input,'String'));
+if (diameter < 2) | (diameter > 100)
+    errordlg('Diameter of the Beads is out of range (5 - 35)');
+    return;
+elseif (diameter/2 == floor(diameter/2))
+    diameter = round(diameter/2)*2 + 1;    
+    warndlg('Diameter has to be an odd valued integer.\n The program adds one');
+end
+
+%Berechnung des tatsächlichen Durchmessers der Beads aufgrund von binning
+diam_px = round(diameter/binning);
+if (diam_px/2 == floor(diam_px/2))
+      diam_px = diam_px + 1;
+end
+
+%Festlegung von der Bandpass-Grenze:
+pass_limit = diam_px + 2;
+%Öffnet Dialogfenster zur Eingabe der gewünschten tif oder bmp Datei
+[FileName,PathName] = uigetfile('*.tif; *.bmp');
+%Falls auf Abbrechen gedrückt wird, soll Funktion tracking verlassen werden
+if (FileName == 0) & (PathName == 0);
+    return;
+end  
+% Length of FileName
+l_path = length(FileName);
+% Ending of the image file (e.g. .bmp, .tif);
+path_end = FileName(l_path-3:l_path);
+% delete Ending of Filename
+FileName = strrep(FileName, path_end, '');
+
+% pixel factor for absolute lengthscales
+switch camera
+    case 1 %60x water immersion objective (Retiga)
+        magni = binning*0.0398532;
+    case 2 %60x water immersion objective (Phantom)
+        magni = binning*0.16;%0.134196;%0.2017%0.0775668; 
+end        
+
+
+% strings for new files
+if (camera==1)
+   FileName = strrep(FileName, '_1', '');
+else
+   FileName = strrep(FileName, '_00001', '');
+end 
+
+file_path = [PathName, FileName];
+cd(PathName)
+tbl_file = [PathName, 'results\table', FileName, '.mat'];
+forces_path = [PathName, 'results\forces_table_', FileName, '.mat'];
+find_frame_path = [PathName, 'results\deleted_frames', FileName, '.mat'];
+if (isdir([PathName, 'results'])==0)
+    mkdir([PathName, 'results']);
+end    
+% Erstelle Ordner für Tif-Dateien (getrackte Beads mit Beadzentren)
+if (isdir([PathName, 'pics_trackedbeads'])==0)
+   mkdir([PathName, 'pics_trackedbeads']);
+end   
+
+  
+
+frames = frames_input;
+num_beads = num_input;
+%count zählt die frames die beim tracking aufgrund fehlerhafter frames
+%herausgeschnitten werden
+count = 0;
+%i ist die Laufvariable für folgende while-Schleife und markiert
+%den ausgewerteten frame
+i = 1;
+k = 1;
+%noise ist ein Parameter der bpass Routine
+noise = .5;
+pos_list = 0;
+pos=1;
+l_pos_list = num_input*1000;
+pos_list_all = [];
+find_frame=0;
+tr_true=0;
+%Folgende while-Schleife liest Bilder aus, findet Beads und speichert Daten
+%(x-Wert, y-Wert, frame) am Ende aus jedem Bild in ein einziges Array 'pos_list'.
+%Zusätzlich soll, falls die gefundene Anzahl an Beads "num_beads" größer 
+%(bzw. kleiner) als "num_input" ist, der Bandpass sukzessiv erhöht
+%(bzw. erniedrigt) werden. Jedesmal wird die Routine pkfnd die Anzahl der gefundenen 
+%Beads bestimmen. Dadurch wird pass_limit so eingestellt, dass
+%num_beads=num_input ist. Bewegt sich pass_limit aus den zugelassen Bereich (1-50), 
+%da z.B. der frame fehlerhaft ist (z.B. keine Beads) so wird innerhalb dieser while-Schleife 
+%dieser frame und die frames in der Umgebung (insgesamt cutting_range
+%frames) aus der pos_list herausgenommen. Zur Kontrolle von pkfnd und cnt
+%wird in fig(1) der erste frame mit getrackten Koordinaten ausgegeben. Hier
+%kann überprüft werden, ob das Zentrum der Beads gefunden wird. Falls ein
+%fehlerhafter frame auftritt, wird dieser auch jedesmal ausgegeben, damit
+%sich leichter ein Grund finden läßt.
+set(handles.data_output, 'String', 'Tracking starts with frame 1!');
+drawnow
+while(i <= frames_input)  
+  if (camera==1)
+      num = int2str(i);
+      %in 'img' wird das erste Bild geladen (s. "help" für unterstützte Formate und Bildtiefen)  
+      img = double(imread([file_path, '_',num , path_end]));  
+  else
+      num = num2str(i, '%05.0f');
+      %in 'img' wird das erste Bild geladen (s. "help" für unterstützte Formate und Bildtiefen)  
+      img = double(imread([file_path, '_',num , path_end]));  
+  end
+  if (i == 1);
+      %determine size of images
+      [m,n] = size(img);
+  end
+  % bpass-Routine
+  %    input:
+  %    1.Arg.: Geladenen Bild (->2-dim. Array)
+  %    2.Arg.: Länge in Pixeln über die Rauschen gemittelt werden soll
+  %    3.Arg.: Bandpass-Grenze in Pixeln (ungerader Wert); sollte größer als ein typisches Objekt sein 
+  %    output:
+  %    Gefiltertes Bild (-> 2-dim. array) 
+  %Filterung des Bildes
+  img_filter = bpass(img, noise, pass_limit);
+  %jetzt wird in max_bright höchste Intensität (zw. 0-255) des Bildes
+  %img_filter berechnet
+  max_bright = max(max(img_filter)); 
+  %und daraus berechnet sich der Schwellenwert 'thrh' für die Routine pkfnd
+  thrh =  2/3*max_bright;
+  % pkfnd-Routine:
+  %   inputs:
+  %   1.Arg.: Das (gefilterte) Bild in dem Helligkeitsspeaks gefunden werden sollen
+  %   2.Arg.: Der kleinste Helligkeitswert, der noch als lokales Maximum
+  %           druchgehen soll
+  %   3.Arg.(optional): Wenn die Daten des Bildes verrauscht sind, d.h. das
+  %                     pro Teilchen, das getrackt werden soll, mehrere
+  %                     lokale Maxima vorliegen, soll hellster Wert
+  %                     genommen werden. Wert sollte etwas größer als
+  %                     Teilchendurchmesser in Pixeln sein
+  %   output:
+  %   (Nx2)-array, dass in [:,1] die x-Werte der lokalen Maxima enthält und
+  %   in [:,2] die zugehörigen y-Werte
+  pk = pkfnd(img_filter, thrh, pass_limit);
+  %Die Routine cntrd berechnet das genaue Zentrum eines jeden gefundenen
+  %Beads der Routine pkfnd
+  %  cntrd-Routine
+  %    inputs:
+  %    1.Arg.: Das gefilterte Bild
+  %    2.Arg.: output der pkfnd-Routine
+  %    3.Arg.: Dieser Wert entspricht der Größe der zu verfolgenden Beads in Pixeln
+  %            plus 2 und gibt den Bereich an über den bei der Kalkulation des
+  %            Zentrums eines jeden Beads gemittelt werden soll.
+  %    output:
+  %    (Nx4)-Array, dass für n getrackte Beads x-, y-, Helligkeitswerte und
+  %    Radius gespeichert hat
+  cnt = cntrd(img_filter, pk, diam_px+2);
+  num_beads = size(cnt,1); %Anzahl der getrackten Beads    
+  
+  
+  %The following two while loops are changing the intensity threshold "thrh"
+  %for the bandpass filter until "num_beads" is equal to "num_input"
+  
+  while (num_beads > num_input)
+      thrh = thrh + max_bright/10;
+      if (thrh >= max_bright)
+          set(handles.data_output, 'String',['frame: ', int2str(i), '; Number of beads (', int2str(num_beads), ') found is not equal to input -> frame will be deleted']);
+          drawnow
+          break;
+      end    
+      
+      pk = pkfnd(img_filter, thrh, pass_limit);
+      cnt = cntrd(img_filter, pk, diam_px+2);
+      num_beads = size(cnt,1);
+  end
+  
+  while (num_beads < num_input)
+      thrh = thrh - max_bright/10;
+      if (thrh <= 1)
+          set(handles.data_output, 'String',['frame: ', int2str(i), '; Number of beads (', int2str(num_beads), ') found is not equal to input -> frame will be deleted']);
+          drawnow
+          break;
+      end    
+      pk = pkfnd(img_filter, thrh, pass_limit);
+      cnt = cntrd(img_filter, pk, diam_px+2);
+      num_beads = size(cnt,1);
+  end
+  
+  %graphical output for first frame in order to determine deficient
+  %filtering or tracking
+  if (i == 1);
+    set(handles.data_output, 'String',['frame: ', int2str(i), '; threshold: ', num2str(thrh, '%3.2f'), '.']);
+    drawnow
+    
+    path_pics = [PathName, 'pics_trackedbeads\', FileName, '_', int2str(i) ,'.tif'];
+    h = figure('Visible', 'on');
+    colormap('gray'), imagesc(img_filter);
+      hold on
+      plot(cnt(:,1), cnt(:,2), '+r');
+      hold off
+    saveas(h, path_pics, 'tif');
+    %question dialog for stopping tracking or not.
+    button = questdlg('Stop image processing to change tracking parameters?', 'Deficient Tracking?', 'Yes', 'No', 'Yes');
+    if (strcmp(button, 'Yes') ==1)
+        close(h)
+        return;
+    end
+    close(h)
+  end
+  
+  if(mod(i,100)==0);
+    set(handles.data_output, 'String',['frame: ', int2str(i), '; threshold: ', num2str(thrh, '%3.2f'), '.']);
+    drawnow
+    
+    path_pics = [PathName, 'pics_trackedbeads\', FileName, '_', int2str(i) ,'.tif'];
+    h = figure('Visible', 'off');
+    colormap('gray'), imagesc(img_filter);
+      hold on
+      plot(cnt(:,1), cnt(:,2), '+r');
+      hold off
+    saveas(h, path_pics, 'tif');
+    close(h);
+  end
+  
+ h = figure('Visible', 'off');
+ colormap('gray'), imagesc(img_filter);
+ hold on
+ plot(cnt(:,1), cnt(:,2), '+r');
+ hold off
+ F(j) = getframe;
+ close(h);
+ 
+  %Falls trotz der vorhergehenden while-Schleifen die Anzahl der getrackten
+  %Beads num_beads nicht mit num_input übereinstimmen, sollen frames um
+  %i.ten fehlerhaften frame im Ausmaß von cutting_range herausgeschnitten
+  %werden
+  
+  if (num_beads ~= num_input)
+      %Due to the fact that we want to cut out around the defect frame, 
+      %we have to destinguish the cases i<cutting_range and i>cutting_range
+      if (i >= cutting_range)
+          %find_frame contains frames that are cut out
+          find_frame(count + 1:count + cutting_range) = (i-floor(cutting_range/2)):(i+floor(cutting_range/2));
+          %after cutting tracking at frame i+cutting_range 
+          i = i + cutting_range;
+      else
+          find_frame(1:cutting_range) = 1:cutting_range;
+          i = cutting_range + 1;
+      end
+      frames = frames - cutting_range;%new total number of used frames
+      count = count + cutting_range;%number of frames cut out,
+      thrh =  max_bright/2;%thrh is reset to initial value
+      continue;
+  end
+  
+  if tr_true == 1
+      positions = cnt(:,1:2);
+      for z=1:num_input
+          ind = find(abs(positions(:,1)-pos_sorted(z,1))<2/magni & ...
+                       abs(positions(:,2)-pos_sorted(z,2))<2/magni);
+          if length(ind)==0
+              find_frame(count + 1) = i;
+              i = i + 1;
+              frames = frames - 1;
+              count = count + 1;
+              break;
+          end
+          pos_sorted(z,:) = positions(ind,:);
+      end
+       if length(ind)==0
+             continue;
+       end
+  end
+ 
+  if tr_true == 0
+     pos_sorted = cnt(:,1:2);
+     [pos_tmp, i_t] = sort(pos_sorted(:,1));
+     pos_sorted = pos_sorted(i_t,:);
+     sorted = 0;
+     i_0 = 1;
+     while(sorted == 0)
+         ind = find(abs(pos_sorted(i_0:end,1)-pos_sorted(i_0,1))<1.5/magni);
+         [pos_tmp, i_t] = sort(pos_sorted(i_0-1+ind,2));
+         pos_sorted(i_0:i_0-1+length(ind),:) = pos_sorted(i_0-1+i_t,:);
+         if i_0-1+length(ind) == num_input
+             sorted = 1;
+         else
+            i_0 = i_0 + length(ind);
+         end
+     end 
+     tr_true = 1;
+  end
+  
+  
+  %the next for loop is saving the tracked coordinates to the position list
+  for j=1:num_input
+     if (mod(pos, l_pos_list) == 0)  
+        % In the case of there is no data in pos_list, the tracking process
+        %will we canceled 
+        if (pos_list == 0)
+            warndlg(['No results in frame', int2str(i-l_pos_list), ' - ', int2str(i), '!\n Check your parameters (e.g. number of beads)!!']);
+            return;
+        end 
+        k = k+1;
+        pos_list_all = vertcat(pos_list_all, pos_list);
+        pos_list = 0;
+     end 
+     pos = num_input*(i - count - 1) + j - l_pos_list*(k-1); 
+     pos_list(pos,1:3) = [pos_sorted(j,:), i];
+  end
+  i = i + 1;   
+end
+pos_list_all = vertcat(pos_list_all, pos_list);
+
+
+list=[];
+for k=1:num_input;
+    bead(1:frames) = k;
+    list = vertcat(list, horzcat(bead', pos_list_all(k:num_input:...
+        num_input*frames,:)));
+end 
+
+assignin('base', 'pos_list', list);
+
+% %%%%% force calculations for hexagon pattern%%%%%
+% data = pos_list_all;
+% 
+% if (isdir([PathName, 'pics_forces'])==0)
+%    mkdir([PathName, 'pics_forces']);
+% end
+% cd([PathName, '\pics_forces']);
+% %Averaging of first 100 datapoints to get startpoint for calculations of
+% %forces
+% 
+% forces = zeros(frames, 3*num_input+4);
+% n_av = 100;
+% k = 0;
+% f_rate = 20; %in Hz
+% mov = avifile([PathName, '\pics_forces\MOVIE_test.avi'],'quality', 100, 'fps', f_rate, 'compression', 'Indeo5');
+% 
+% for i=1:n_av
+%     if i==find_frame(k+1)
+%         k = k + 1; 
+%     end
+%     forces(i,1:2) = [i, (i+k)/f_rate];
+% end
+% 
+% for i=1:num_input
+%     data_0(i,:) = mean(data(i:num_input:n_av*num_input,1:2)); 
+% end
+% 
+% %kappa stiffnesses of traps 
+% kappa = [7.1, 7.5, 6.7, 7.4, 10.5, 10.7, 7.2];
+% n=1;
+% for i=n_av+k+1:frames_input;
+%     if i==find_frame(k+1)
+%         k = k + 1; 
+%         continue;
+%     end
+%     if (camera==1)
+%       num = int2str(i);
+%       %in 'img' wird das erste Bild geladen (s. "help" für unterstützte Formate und Bildtiefen)  
+%       img = double(imread([file_path, '_',num , path_end]));  
+%     else
+%       num = num2str(i, '%05.0f');
+%       %in 'img' wird das erste Bild geladen (s. "help" für unterstützte Formate und Bildtiefen)  
+%       img = double(imread([file_path, '_',num , path_end]));  
+%     end
+%     h = figure;
+%     set(h,'DoubleBuffer','on', 'Visible','off'); 
+%     set(gca, 'Visible','off')
+%     colormap('gray'), imagesc(img),...
+%          text(5,5, num2str(i/f_rate, '%3.2f s'),'FontSize',14, 'Color', 'w'); 
+%     for j=1:num_input; 
+%         delta_x = data((i-k-1)*num_input+j,1) - data_0(j,1);
+%         delta_y = data((i-k-1)*num_input+j,2) - data_0(j,2);
+%         hold on
+%         vectarrow_1(data_0(j,:), data((i-k-1)*num_input+j,1:2));
+%         force = magni*sqrt(delta_x^2 + delta_y^2)*kappa(j);
+%         force_x = magni*delta_x*kappa(j);
+%         force_y = magni*delta_y*kappa(j);
+%         forces(i-k,1:2) = [i, i/f_rate];
+%         forces(i-k,3*(j-1)+3) = force;
+%         forces(i-k,3*(j-1)+4) = force_x;
+%         forces(i-k,3*(j-1)+5) = force_y;
+%         %force_x = magni*delta_x*kappa(j);
+%         %force_y = magni*delta_y*kappa(j);
+%         hold on, %plot(data_0(j,1), data_0(j,2), 'r*', data((i-1-(k-1))*num_input+j,1), data((i-1-(k-1))*num_input+j,2), 'g*'),...
+%         text(data((i-k-1)*num_input+j,1)+5, data((i-k-1)*num_input+j,2)+5, ...
+%            num2str(force, '%1.2f pN'), 'FontSize', 10, 'Color', 'r'),...
+%         text(data_0(j,1)-5, data_0(j,2)-5, ...
+%            int2str(j), 'FontSize', 12, 'Color', 'g')
+%     end
+%     hold off
+%     if(mod(i-n_av-k,10)==0);
+%         set(handles.data_output, 'String',['frame ', int2str(i-n_av-k), ' was processed.']);
+%         drawnow
+%         F = getframe(h);
+%         mov = addframe(mov,F);
+% %         num = num2str(n, '%05.0f');
+% %         im_path = [FileName, '_',num , '.tif']; 
+% %         print('-dtiff', '-r400', im_path) 
+% %         n = n+1;
+%     end
+%     close(h);
+%     
+% %     imwrite(im.cdata,[PathName, 'pics_forces\', FileName,...
+% %     '_',num , '.tif'],'tif', 'Compression', 'none', 'Resolution', [m,n]);
+%     
+% end
+% % pix2anigif([PathName, 'pics_forces\', FileName, '_'], 'tif', 1, i-n_av-k,...
+% %                 [PathName, 'pics_forces\animated_output'],'%05d',f_rate)
+% % figure(1)
+% % movie(M,1)
+% % size(M)
+% % movie2avi(M, [PathName, 'pics_trackedbeads\', FileName,...
+% %     '_ movie_forces.avi'], 'quality', 100, 'fps', f_rate, 'compression', 'None')
+% for i=1:size(forces,1)
+%    forces(i,end-1) = sum(forces(i,3:3:end-2));
+%    forces(i,end) = sum(forces(i,4:3:end-2));
+% end
+%  save(forces_path, 'forces', '-mat');
+%  
+ %%%%% end force calculations  %%%%%%%%%%%%%%%%%%%5
+%   track-Routine
+%    input:
+%    1.Arg.: die zuvor generierte pos_list
+%    2.Arg.: Abschätzung der maximalen Weglänge in Pixel, die ein Bead
+%            innerhalb eines Zeitintervalls zurücklegt
+%    output:
+%    (frames*Nx4)-array:
+%           1. Spalte: x-Werte
+%           2. Spalte: y-Werte
+%           3. Spalte: frame
+%           4. Spalte: Bead
+data_track = [frames, num_input, diam_px; binning, m, n; magni, 0, 0];
+pos_list_all = vertcat(pos_list_all, data_track); 
+
+
+save(tbl_file, 'pos_list_all', '-mat');
+save(find_frame_path, 'find_frame', '-mat');
+if (frames < frames_input)
+   set(handles.data_output, 'String', ['End of Tracking! Only ', int2str(frames), ' frames were used']);
+   drawnow
+   fprintf(1, 'The following frames had to be deleted:\n');
+   disp(find_frame);
+else
+   set(handles.data_output, 'String', 'End of Tracking! All frames were used!');
+   drawnow
+end
+
+
+button = questdlg('Do you want to delete all tif-files?', 'Deletion of pictures', 'Yes', 'No', 'Yes');
+
+if (strcmp(button, 'Yes') ==1)
+    for k=2:frames_input
+        if(mod(k,100)==0);
+           set(handles.data_output, 'String',['frame ', int2str(k), ' is deleted']);
+           drawnow 
+        end
+        if (camera==1)
+              num = int2str(k);
+              delete([file_path, '_', num, path_end]); 
+        else
+              num = num2str(k, '%05.0f');
+              delete([file_path, '_', num, path_end]); 
+        end 
+    end 
+else
+    return;
+end    
+
+
+end
+ 
+
+
+
+
