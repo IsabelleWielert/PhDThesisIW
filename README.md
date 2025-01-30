@@ -4,8 +4,7 @@ This GutHub repository provides you with all analysis programs which were used d
 The programs are written in MATLAB 2019 and are sorted by their functionality. In every new branch you will find several programs which were used to analyse the data. For every analysis a description is attached. Furthermore, you can find information about how the data needs to be processed to be able to use them for analysing the data. 
 
 Here is a short overview about the branches: 
-- ColonyMotility (Analysis of single-cell tracks of bacteria embedded in colony.)
-- ColonyStructure (Determine the radial distribution function of gonococcal colonies. Developed by Tom Cronenberg and adpated by myself)
+- ColonyMotilityandStructure (Analysis of single-cell tracks of bacteria embedded in colony. Determine the radial distribution function of gonococcal colonies - developed by Tom Cronenberg and adpated by myself.)
 - DoubleTrap (Analysis of Data from double laser trap & the calibration of the trap stiffness.)
 - GrowthratesandStatisticalTest (Based on growth rate data from colony forming units.)
 - PiliLabelling (Semi-automated programs to analyse videos of fluorescently labelled T4P - numbers and dynamics)
