@@ -1,7 +1,7 @@
 # PhDThesisIW
 # Analysis of within colony motility and colony structure 
 
-Videos and 2-dimensional z-stacks can be analysed via the provided programs. Methodology of imaging is described in Cronenberg T, Hennes M, Wielert I, Maier B (2021) Antibiotics modulate attractive interactions in bacterial colonies affecting survivability under combined treatment. PLOS Pathogens 17(2): e1009251. https://doi.org/10.1371/journal.ppat.1009251. 
+Videos and 2-dimensional images in z-stacks can be analysed via the provided programs. Methodology of imaging is described in Cronenberg T, Hennes M, Wielert I, Maier B (2021) Antibiotics modulate attractive interactions in bacterial colonies affecting survivability under combined treatment. PLOS Pathogens 17(2): e1009251. https://doi.org/10.1371/journal.ppat.1009251. 
 
 To analyse the within-colony motility, you need first need to track your images (.nd2 format) via the Trackmate Fiji PlugIn in ImageJ (pre-processing: use stackreg to not include global motition of the colony, as you are only interested in the single cell motilities), resulting in an excel sheet (.csv format) of the tracks. Next, you read in your excel-sheet and one image of your analysed video (.tif format) in ColonyMotilityAnalysis.m. This program saves the diffusion constants in radial shells from the center to the edge of the colony (.mat format). To further process your data and to determine the statistics and averages of more than one colony you then need to read in the .mat files in ProcessedAnalysisMotility.m which results in the final data of your within-colony motility (diffusion constant against distance to edge of colony). 
 
