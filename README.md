@@ -1,9 +1,10 @@
 # PhDThesisIW
 # Analysis of fluorescently labelled type IV pili (T4P)
-The prorgams to analyse the pilus number, production rates, lengths, retraction velocities and elongation velocities are deposited here.
-These programs are developed to analyse pilus dynamics and the number of T4P when took videos of fluorescently labelled T4P (Methods in Kraus-Römer S, Wielert I, Rathmann I, Grossbach J and Maier B (2022) External Stresses Affect Gonococcal Type 4 Pilus Dynamics. Front. Microbiol. 13:839711. doi: 10.3389/fmicb.2022.839711). This should be a short discription how to use the programs and handle your data for analysis. 
-
-To analyse the pilus number and production rate ofthe cell use the T4P_Contour program.m. This is a program, in which you need to click yourself through the analysis, in the end a file is created of a matrix, which is a kymograph of the contour intensity profile. Then, you need to use the T4PNumberProcessedAnalysis.m to determine the pilus number and production rate. 
+The programs for analysing pilus numbers, production rates, lengths, retraction and extension velocities are deposited here.
+These programs were developed to analyse pilus dynamics and the number of T4P when videos of fluorescently labelled T4P were recorded (methods in Kraus-Römer S, Wielert I, Rathmann I, Grossbach J and Maier B (2022) External Stresses Affect Gonococcal Type 4 Pilus Dynamics. Front. Microbiol. 13:839711. doi: 10.3389/fmicb.2022.839711). This should be a short description of how to use the programs and how to handle your data for analysis. 
 
 
-The dynamics of the T4P is analysed via the T4P_dynamics.m program. This is a semiautomated program in which the videos are processed and the dynamics are determined in an graphical user interface (GUI). This programs creat a file in which, lengths of the pili, duration of the tracks and velocities are stored. Next, to further process the data and get the mean, you need to use the DynamicsProcessedAnalysis.m program which is collecting all .mat files from analysis before and determine the mean. 
+In order to analyse the pilus number and production rate of the cell, it is necessary to utilise the T4P_Contour.m program. This program requires the user to manually navigate through the analysis process. Consequently, a file is created which comprises a matrix and which is a kymograph of the contour intensity profile (.mat format). Thereafter, the T4PNumberProcessedAnalysis.m program must be employed in order to determine the pilus number and production rate. 
+
+
+The dynamics of the T4P are analysed via the T4P_dynamics.m program, a semiautomated program that processes videos and determines dynamics in a graphical user interface (GUI). This program generates a file in which lengths of the pili, duration of the tracks and velocities are stored. Subsequently, to further process the data and determine the mean, the DynamicsProcessedAnalysis.m program is utilised, which collates all .mat files from the analysis and calculates the mean. 
