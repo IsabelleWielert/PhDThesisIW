@@ -1,2 +1,8 @@
 # PhDThesisIW
-All Programs used for analysis during my PhD thesis.
+# Analysis of within colony motility and colony structure 
+
+Videos and 2-dimensional z-stacks can be analysed via the provided programs. Methodology of imaging is described in Cronenberg T, Hennes M, Wielert I, Maier B (2021) Antibiotics modulate attractive interactions in bacterial colonies affecting survivability under combined treatment. PLOS Pathogens 17(2): e1009251. https://doi.org/10.1371/journal.ppat.1009251. 
+
+To analyse the within-colony motility, you need first need to track your images (.nd2 format) via the Trackmate Fiji PlugIn in ImageJ (pre-processing: use stackreg to not include global motition of the colony, as you are only interested in the single cell motilities), resulting in an excel sheet (.csv format) of the tracks. Next, you read in your excel-sheet and one image of your analysed video (.tif format) in ColonyMotilityAnalysis.m. This program saves the diffusion constants in radial shells from the center to the edge of the colony (.mat format). To further process your data and to determine the statistics and averages of more than one colony you then need to read in the .mat files in ProcessedAnalysisMotility.m which results in the final data of your within-colony motility (diffusion constant against distance to edge of colony). 
+
+The structure of the colony is determined from 2-dimensional images in a z-stack of the colony (.nd2 format). The first step is to determine the three-dimensional positions of the bacteria embedded in the colony. This will be performed via the program SinglecelltrackingZstacks.m, resulting in a .mat file of the positions. The following step is to extract the data and compute the radial distribution function via Radialdistribution_localorder.m.  
