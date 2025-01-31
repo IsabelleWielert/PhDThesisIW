@@ -1,2 +1,8 @@
 # PhDThesisIW
-All Programs used for analysis during my PhD thesis.
+# Analysis of Interaction States of N. gonorrhoeae
+
+These programs are developed to analyse image data of interacting bacteria, measured with an double laser tweezers setup. The experiment is described in detail in Cronenberg T, Hennes M, Wielert I, Maier B (2021) Antibiotics modulate attractive interactions in bacterial colonies affecting survivability under combined treatment. PLOS Pathogens 17(2): e1009251. https://doi.org/10.1371/journal.ppat.1009251.
+
+Initially, the trap must be calibrated. To this end, videos with a frame rate of 2500 Hz are made, while non-piliated bacteria are trapped. This procedure is repeated for a minimum of four distinct laser intensities (2%, 5%, 7%, and 10%) to extrapolate the trap stiffness to 100% laser power. The vidoes of cells (.tif) are then tracked via the TrackingDoubleTrap.m function (.txt), and from these tracks the powerspectra are determined. The trap stiffness for each laser intensity is then calculated via the Powerspectra.m function, and the extrapolation to 100% is performed via the ExtrapolatingStiffness.m function.
+
+In order to analyse the interaction states, it is necessary to track the positions of the interacting bacteria via the TrackingDoubleTrap.m function (.txt). These files can then be analysed via the graphical user interface Interactionstates.m, resulting in a .mat file for each interacting bacterial pair. The .mat files contain information about the frequency of retraction, elongation, pausing and bundling events, the rupture force, the duration, the velocities and the probability for each interaction type. These .mat files can then be subjected to further analysis using the InteractionsEvaluation.m function to filter and average the data. 
