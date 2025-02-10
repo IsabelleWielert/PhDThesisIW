@@ -94,7 +94,7 @@
 
                 while ~isempty(sichtbar)
 
-                    %img wird ge‰ndert
+                    %img wird ge√§ndert
                     prompt = {'Happy with video quality?  Range: [9-19]','Happy with contrast?'};
                     dlgtitle = 'Frequency cut-off';
                     definput = sichtbar;
@@ -109,8 +109,8 @@
                         cont=str2num(sichtbar{2,1});
                         Movie = zeros(size(img,1),size(img,2),size(img,3),'uint8');
                         %%
-                        %This is a new filter which was implemented after publication of 'External Stresses Affect Gonococcal T4P Dynamics' by S Kraus-Rˆmer and I Wieler et al. 2022,Front. Microbiol. 13:839711.
-                        %It is a butterworthlowpass filter, allows for fropping high frquency components like noise and by this smoothens the image and enhancing details of the image.
+                        %This is a new filter which was implemented after publication of 'External Stresses Affect Gonococcal T4P Dynamics' by S Kraus-R√∂mer and I Wieler et al. 2022,Front. Microbiol. 13:839711.
+                        %It is a butterworthlowpass filter, allows for dropping high frquency components like noise and by this smoothens the image and enhancing details of the image.
                         for w = 1:size(img,3)
 
 
@@ -344,7 +344,7 @@
                         answer1 = 1;
                         imgcopy=BW22;
                         while ~isempty(answer1)
-                            %img wird ge‰ndert
+                            %img wird ge√§ndert
                             prompt = {'Enter a value for lower limit of contrast (0.01 bis 1): (are you happy ? Click the cancel button!) ', 'Enter value for upper limit (0.01-1), must be greater than lower bound'};
                             dlgtitle = 'Contrast kymograph';
                             definput = {'0.8','0.88'};
@@ -365,7 +365,7 @@
                         answer = 1;
                         imgcopy=BW2;
                         while ~isempty(answer)
-                            %img wird ge‰ndert
+                            %img wird ge√§ndert
                             prompt = {['Enter a value for sensitivity (0.8 bis 0.01): (are you happy ? Click the cancel button!) ']};
                             dlgtitle = 'Sensitivity Edge detction';
                             definput = {'0.05'};
