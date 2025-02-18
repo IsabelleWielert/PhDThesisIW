@@ -6,7 +6,7 @@ clc;
 clear all;
 % read in the data
 
-allpath='Yuur folder with measurements for a certain laser intensity';
+allpath='Your folder with measurements for a certain laser intensity';
 % arrays to save the stiffness
 K1=[];
 K2=[];
