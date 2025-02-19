@@ -61,9 +61,9 @@
 
         count=count+1;
 
-        if j==21
+        if j==20
             count=count+1;
-        elseif j==62
+        elseif j==61
             count=count+1;
 
         end
