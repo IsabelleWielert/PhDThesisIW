@@ -5,7 +5,7 @@
 set(groot, 'DefaultTextInterpreter', 'tex');
 set(groot, 'DefaultAxesTickLabelInterpreter', 'tex');
 set(groot, 'DefaultLegendInterpreter', 'tex');
-% Schriftart und Größe global setzen
+% Schriftart und GrÃ¶ÃŸe global setzen
 set(groot, 'DefaultAxesFontName', 'Arial');
 set(groot, 'DefaultTextFontName', 'Arial');
 set(groot, 'DefaultLegendFontName', 'Arial');
@@ -20,13 +20,12 @@ set(groot, 'DefaultAxesFontName', 'Arial');
 set(0,'DefaultAxesColorOrder',hsv(16));
 cmap=[[216 27 96]./255;[30 136 229]./255; [255 193 7]./255; [0 77 64]./255; [254 97 0]./255 ;[120 94 240]./255;[120 94 100]./255;[120 94 10]./255];
 
-% open prepocessed file .mat format
-% fname = {fullfile('C:\Users\Isabelle\Desktop\Daten für Benedikt\Raw Data and processed Data\*\*\*.mat')};
+
 
 % Hauptpfad setzen (anpassen!)
-hauptordner = 'C:\Users\Isabelle\Desktop\Daten für Benedikt\Raw Data and processed Data';
+hauptordner = 'Yourfolder';
 
-% Infos über alle Dateien und Unterordner holen
+% Infos Ã¼ber alle Dateien und Unterordner holen
 allePfadInfos = dir(fullfile(hauptordner, '**', '*','*')); % '**' = rekursiv
 
 % Nur Verzeichnisse filtern (ohne '.' und '..')
@@ -36,7 +35,7 @@ alleOrdner = alleOrdner(~ismember({alleOrdner.name}, {'.', '..'}));
 Radius_innercore=[];
 Widthshell=[];
 foldinginnercore=[];
-% Loop über alle Ordner
+% Loop Ã¼ber alle Ordner
 
 r30min=[];
 r60min=[]; 
@@ -78,8 +77,8 @@ for i = 1:length(alleOrdner)
 plot(max(B(k).XA_sortedfromedge)-B(k).XA_sortedfromedge,smoothdata(B(k).newYA,'movmean',0.2*length(B(k).newYA)), 'LineWidth',1.5,'Color', cmap(k,:));
 hold on; 
 %     legend('off');
-    ylabel('D [µm^2/s]');
-    xlabel('Distance from centre of colony [µm]');
+    ylabel('D [Âµm^2/s]');
+    xlabel('Distance from centre of colony [Âµm]');
 ylim([0, 0.0015])
 xlim([0, 25])
 
@@ -94,8 +93,8 @@ for k=1:length(B)
     findpeaks(max(smoothdata(B(k).newYA,'movmean',0.2*length(B(k).newYA)))-smoothdata(B(k).newYA,'movmean',0.2*length(B(k).newYA)),B(k).XA_sortedfromedge,'MinPeakProminence',0.0002,'Annotate','extents')
     hold on
     grid off
-        ylabel('D_{max}-D [µm^2/s]');
-    xlabel('Distance from edge of colony [µm]');
+        ylabel('D_{max}-D [Âµm^2/s]');
+    xlabel('Distance from edge of colony [Âµm]');
     hold off
     [pks,locs,widths,proms]=findpeaks(max(smoothdata(B(k).newYA,'movmean',0.2*length(B(k).newYA)))-smoothdata(B(k).newYA,'movmean',0.2*length(B(k).newYA)),B(k).XA_sortedfromedge,'MinPeakProminence',0.0002,'Annotate','extents');
     if ~isempty(pks)
@@ -164,8 +163,8 @@ scatter(foldinginnercore(1:end-1,1),foldinginnercore(1:end-1,1)+foldinginnercore
 %     plot(B(i).XAsortedfromedge,smoothdata(B(i).newYA,'movmean',0.1*length(B(i).newYA)), 'LineWidth','color', cmap(i,:));
 %     hold on;
 %     legend('Location', 'northwest');
-%     ylabel('Diffusion constant [µm^2/s]');
-%     xlabel('Distance from edge of colony [µm]');
+%     ylabel('Diffusion constant [Âµm^2/s]');
+%     xlabel('Distance from edge of colony [Âµm]');
 %     title('Radial motility (X hours prior to folding)');
 % 
 %     
@@ -220,12 +219,12 @@ hold on
 
 
 
-% Farben für Punkte
+% Farben fÃ¼r Punkte
 farben = [[216 27 96]./255;[30 136 229]./255; [255 193 7]./255];
 
 %
 % Rohdaten als farbige Punkte plotten
-rng(1); % für Reproduzierbarkeit
+rng(1); % fÃ¼r Reproduzierbarkeit
 x1 = 1 + 0.1*randn(1,length(daten1));
 x2 = 2 + 0.1*randn(1,length(daten2));
 x3 = 3 + 0.1*randn(1,length(daten3));
@@ -233,7 +232,7 @@ x3 = 3 + 0.1*randn(1,length(daten3));
 scatter(x1, daten1, 40, farben(1,:), 'filled', 'MarkerFaceAlpha', 0.7)
 scatter(x2, daten2, 40, farben(2,:), 'filled', 'MarkerFaceAlpha', 0.7)
 scatter(x3, daten3, 40, farben(3,:), 'filled', 'MarkerFaceAlpha', 0.7)
-ylabel('<r> [µm]')
+ylabel('<r> [Âµm]')
 
 
 hold off
