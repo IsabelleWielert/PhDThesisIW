@@ -78,7 +78,7 @@ ginfo=load('info.mat')
 handles.arr2=ginfo.arr2;
 handles.framerate=ginfo.framerate;
 handles.savepath=ginfo.allsavepath
- handles.Masstab= 0.0792354;%Orca-> Überprüft
+ handles.Masstab= 0.0792354;%Orca-> ÃœberprÃ¼ft
 
 handles.counter1 = 0;
 handles.counter2 = 0;
@@ -110,7 +110,7 @@ grid(handles.ForceVelocity,'on');
 set(handles.ForceVelocity,'XMinorGrid','on','XMinorTick','on');
 
 
-%set paraneter für tables
+%set paraneter fÃ¼r tables
 set(handles.table_elo,'Data',[]);
 set(handles.table_retract,'Data',[]);
 set(handles.table_paus,'Data',[]);
