@@ -1,6 +1,6 @@
 # PhDThesisIW
 
-This GutHub repository contains all the analysis programs that were utilised and developed during my (Isabelle Wielert) PhD projects. The programs have been written in MATLAB 2019 and are organised according to their functionality. In each new branch, several programs that were employed for data analysis are included. A description is provided for every analysis. Additionally, instructions on how to process the data for analysis purposes are available. For image analysis, the bioformats_package.jar must be downloaded.
+This GutHub repository contains all the analysis programs that were utilised and developed during my (Isabelle Wielert) PhD projects. The programs have been written in MATLAB 2019 and are organised according to their functionality. In each new branch, the programs that were employed for data analysis are included. A description is provided for every analysis. Additionally, instructions on how to process the data for analysis purposes are available. For image analysis, the bioformats_package.jar must be downloaded.
 
 
 Overview: 
@@ -8,6 +8,6 @@ Overview:
 - DoubleTrap (Analysis of Data from double laser trap & the calibration of the trap stiffness.)
 - GrowthratesandStatisticalTest (Based on growth rate data from colony forming units.)
 - PiliLabelling (Semi-automated programs to analyse videos of fluorescently labelled T4P - numbers and dynamics.)
-- RadialMotilityAnalysis_ProjectColonyEversion (Analysis of motility of fluorescentgonococci inside colonies, radially and time-resolved to investigate motility regimes.)
+- RadialMotilityAnalysis_ProjectColonyEversion (Analysis of motility of fluorescent gonococci inside colonies, radially and time-resolved to investigate motility regimes.)
 - StatisticalTest_SurvivalAssay (Statistical tests on data from survival assays of colony forming units to verify significant changes in killing kinetics.)
-- TwitchingMotility (Analyse the twithcing motility of gonococci. Developed by Lena Dewenter, post-processing of tracks was developed by Isabelle Wielert.)
+- TwitchingMotility (Analysis of twitching of gonococci. Developed by Lena Dewenter, post-processing of tracks was developed by Isabelle Wielert.)
